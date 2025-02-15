@@ -16,17 +16,27 @@ class Display:
             day = int(self.env.now // 24) + 1  # 현재 시뮬레이션 시간을 일 단위로 계산
             self.daily_events.append(f"\n===== Day {day} Report: =====")  # 일별 보고서 제목 추가
             yield self.env.timeout(24)  # 24시간(1일)마다 실행
-     
+
+class Order:
+    def __init__(self, order_id, jobs):
+        self.order_id = order_id
+        self.jobs = jobs  # 이 주문에 포함된 Job 리스트
+        # 필요에 따라 생성 시각 등 추가 정보를 기록할 수 있음.
+        self.create_time = jobs[0].create_time if jobs else None
+        # order_build_time: 주문 내 모든 Job의 build_time의 합
+        self.order_build_time = sum(job.build_time for job in jobs)
+
 # Customer 클래스: 지속적으로 Job(작업)을 생성
 class Customer:
-    def __init__(self, env, shortage_cost, daily_events, satisfication, job_store):
+    def __init__(self, env, shortage_cost, daily_events, satisfication, order_store):
         self.env = env  # SimPy 환경 객체
         self.daily_events = daily_events  # 일별 이벤트 로그 리스트
         self.current_job_id = 0  # Job ID 초기값
         self.last_assigned_printer = -1  # 마지막으로 할당된 프린터 ID
         self.unit_shortage_cost = shortage_cost  # Shortage cost
         self.satisfication = satisfication
-        self.job_store = job_store  # simpy.Store 객체 추가
+        self.order_store = order_store  # simpy.Store 혹은 큐
+        self.temp_order_list = []       # 누적된 주문(Order)들을 임시로 저장
 
     def create_jobs_continuously(self):
         """지속적으로 Job을 생성하고 프린터에 할당"""
@@ -38,44 +48,67 @@ class Customer:
 
             # 현재 날짜 계산
             day = int(self.env.now // 24) + 1
-
-            # Job 생성
-            job = Job(self.env, self.current_job_id, JOB_TYPES["DEFAULT"])
-            self.current_job_id += 1
-            # JOB_LOG에 Job 기록 추가
-            JOB_LOG.append({
-                'day': day,
-                'job_id': job.job_id,
-                'width': job.width,
-                'height': job.height,
-                'depth': job.depth,
-                'create_time': job.create_time,
-                'volume': job.volume,
-                'build_time': job.build_time,
-                'post_processing_time': job.post_processing_time,
-                'packaging_time': job.packaging_time
-            })
-
-
-            if (job.width <= PRINTERS_SIZE["WIDTH"] and job.height <= PRINTERS_SIZE["HEIGHT"] and job.depth <= PRINTERS_SIZE["DEPTH"]):
-                job_list.append(job)
-
             
-            else:
-                # Shortage cost 발생: 적합한 프린터가 없을 때
+            # 한 주문을 위해 JOB_SIZE 개의 Job을 동시에 생성
+            order_jobs = []
+
+            for _ in range(CUSTOMER["JOB-SIZE"]):
+
+                # Job 생성
+                job = Job(self.env, self.current_job_id, JOB_TYPES["DEFAULT"])
+                self.current_job_id += 1
+
+                # JOB_LOG에 Job 기록 추가
+                JOB_LOG.append({
+                    'day': day,
+                    'job_id': job.job_id,
+                    'width': job.width,
+                    'height': job.height,
+                    'depth': job.depth,
+                    'create_time': job.create_time,
+                    'volume': job.volume,
+                    'build_time': job.build_time,
+                    'post_processing_time': job.post_processing_time,
+                    'packaging_time': job.packaging_time
+                })
+
+                if (job.width <= PRINTERS_SIZE["WIDTH"] and job.height <= PRINTERS_SIZE["HEIGHT"] and job.depth <= PRINTERS_SIZE["DEPTH"]):
+                    order_jobs.append(job)
+
+                
+                else:
+                    # Shortage cost 발생: 적합한 프린터가 없을 때
+                    self.daily_events.append(
+                        f"Job {job.job_id} could not be assigned: No suitable printer available (Job size: {job.volume:.2f})"
+                    )
+                    # Shortage cost 발생
+                    job.shortage = 1  # Shortage는 한 번에 한 프린터가 부족할 때 1로 설정
+                    
+                    Cost.cal_cost(job, "Shortage cost")
+                    
+                    # 고객 만족도 계산
+                    self.satisfication.cal_satisfication(job, self.env.now)
+            
+            # 생성된 JOB_SIZE 개의 Job들을 하나의 Order 객체로 묶음
+            new_order = Order(self.current_order_id, order_jobs)
+            self.current_order_id += 1
+            self.daily_events.append(
+                f"Order {new_order.order_id} created with {len(order_jobs)} jobs at time {self.env.now:.2f}."
+            )
+            self.temp_order_list.append(new_order)
+
+            # 만약 누적된 주문이 ORDER_LIST_SIZE 만큼 모였으면 order_store에 배치로 넣기
+            if len(self.temp_order_list) >= CUSTOMER["ORDER_LIST_SIZE"]:
+                # order_store.put() 은 비동기로 주문(혹은 주문 배치)을 추가합니다.
+                self.order_store.put(self.temp_order_list.copy())
                 self.daily_events.append(
-                    f"Job {job.job_id} could not be assigned: No suitable printer available (Job size: {job.volume:.2f})"
+                    f"{len(self.temp_order_list)} orders accumulated. Sending batch to printer at time {self.env.now:.2f}."
                 )
-                # Shortage cost 발생
-                job.shortage = 1  # Shortage는 한 번에 한 프린터가 부족할 때 1로 설정
-                
-                Cost.cal_cost(job, "Shortage cost")
-                
-                # 고객 만족도 계산
-                self.satisfication.cal_satisfication(job, self.env.now)
-            
+                self.temp_order_list.clear()
+
+            '''
             # dispatching rule 적용 후 total_job_list에 job_list 추가
-            if len(job_list) == JOB_LOT_SIZE:
+            if len(job_list) == CUSTOMER["ORDER_LIST_SIZE"]:
                 
                 if DISPATCHING_RULE["FIFO"]:
                     next_process_job_list = FIFO(job_list)
@@ -93,50 +126,95 @@ class Customer:
                     next_process_job_list = EDD(job_list)
                 else:
                     next_process_job_list = job_list  # 기본값 또는 다른 방법을 사용할 경우
+                
+                next_process_job_list = job_list
                 for job_item in next_process_job_list:
                     # 비동기로 job_store에 넣는다.
                     self.job_store.put(job_item)
                 job_list.clear()
-
+                '''
+            
             # 다음 Job 생성 간격 (지수 분포 사용)
             interval = np.random.exponential(JOB_CREATION_INTERVAL)
             yield self.env.timeout(interval)
 
 # Printer 클래스: 프린터의 작업 처리
 class Printer:
-    def __init__(self, env, printing_cost, daily_events, printer_id, post_processor, job_store):
+    def __init__(self, env, printing_cost, daily_events, printer_id, post_processor, order_store):
         self.env = env
         self.daily_events = daily_events
         self.printer_id = printer_id
         self.is_busy = False
         self.post_processor = post_processor
         self.unit_printing_cost = printing_cost
-        self.job_store = job_store  # simpy.Store 객체
+        self.order_store = order_store  # 주문 배치를 받는 store
 
-    def process_jobs(self):
+    def process_order_batch(self):
         while True:
-            # job_store에서 job이 들어올 때까지 blocking
-            job = yield self.job_store.get()
-            self.is_busy = True
-            start_time = self.env.now
+            # 주문 배치(리스트)를 order_store에서 받음
+            order_batch = yield self.order_store.get()
             self.daily_events.append(
-                f"{int(self.env.now % 24)}:{int((self.env.now % 1) * 60):02d} - Job {job.job_id} is printed on Printer {self.printer_id} (Print)"
+                f"{int(self.env.now % 24)}:{int((self.env.now % 1) * 60):02d} - A batch of {len(order_batch)} orders is received on Printer {self.printer_id}."
             )
-            Cost.cal_cost(job, "Printing cost")
-            yield self.env.timeout(job.build_time / 60)
-            end_time = self.env.now
-            self.is_busy = False
-            self.daily_events.append(
-                f"{int(self.env.now % 24)}:{int((self.env.now % 1) * 60):02d} - Job {job.job_id} is finishing on Printer {self.printer_id} (Print)"
-            )
-            DAILY_REPORTS.append({
-                'job_id': job.job_id,
-                'printer_id': self.printer_id,
-                'start_time': start_time,
-                'end_time': end_time,
-                'process': 'Printing'
-            })
+            # 배치 내의 각 Order에 대해 처리 진행
+            for order in order_batch:
+                self.env.process(self.process_order(order))
+
+    def process_order(self, order):
+        """
+        한 주문(Order)을 처리하는 프로세스.
+        주문 내의 모든 Job의 build_time 합산값(order_build_time)만큼 대기하며 인쇄 작업을 모사.
+        """
+        # 주문 처리를 시작할 때 프린터는 바쁘게 설정합니다.
+        self.is_busy = True
+            
+        # set up
+        set_up_start = self.env.now
+        self.daily_events.append(
+        f"{int(self.env.now % 24)}:{int((self.env.now % 1)*60):02d} - Order {order.order_id} is printing on Printer {self.printer_id}. (Set up)"
+        )
+        yield self.env.timeout(10 / 60)
+        set_up_end = self.env.now
+
+        # build
+        start_time = self.env.now
+        self.daily_events.append(
+            f"{int(self.env.now % 24)}:{int((self.env.now % 1) * 60):02d} - Job {job.job_id} is printed on Printer {self.printer_id} (Print)"
+        )
+        yield self.env.timeout(order.order_build_time / 60)
+        end_time = self.env.now
+
+        # closing
+        closing_start = self.env.now
+        self.daily_events.append(
+            f"{int(self.env.now % 24)}:{int((self.env.now % 1)*60):02d} - Order {order.order_id} is closing for 30 min on Printer {self.printer_id}. (Closing)"
+        )
+        yield self.env.timeout(30 / 60)  # 예시: 30분 closing time
+        closing_end = self.env.now
+        
+        # 비용계산
+        Cost.cal_cost(order, "Printing cost")
+        self.is_busy = False
+        self.daily_events.append(
+            f"{int(self.env.now % 24)}:{int((self.env.now % 1)*60):02d} - Order {order.order_id} finished printing on Printer {self.printer_id}."
+        )
+        DAILY_REPORTS.append({
+            'order_id': order.order_id,
+            'printer_id': self.printer_id,
+            'set_up_start': set_up_start,
+            'set_up_end': set_up_end,
+            'start_time': start_time,
+            'end_time': end_time,
+            'closing_start': closing_start,
+            'closing_end': closing_end,
+            'process': 'Printing'
+        })
+        # 프린터 작업이 완료된 주문 내의 각 Job은 후처리 단계로 전달
+        for job in order.jobs:
             self.post_processor.assign_job(job)
+
+        # 주문 처리가 끝났으므로 프린터의 busy 상태를 해제합니다.
+        self.is_busy = False
 
 # PostProcessing 클래스: 후처리 작업을 관리
 class PostProcessing:
@@ -254,12 +332,17 @@ class Job:
                        * self.width
                        * self.depth
                        )# Job 볼륨
+        
+        # Printer class time
         self.build_time = int(round(self.volume / (config["BUILD_SPEED"] 
                                          * 3.14 
                                          * (config["FILAMENT_DIAMETER"]/2)**2
                                          )))  # 제작 시간
+
+        # Post processsing, washing, air drying class time
         self.post_processing_time = np.mean([self.height, self.width, self.depth]) // (config["POST_PROCESSING_TIME_COEFFICIENT"])  # 후처리 시간
 
+        # Packaging time
         if self.volume <= (LENGHT_RANGE["WIDTH"]["MAX"] * LENGHT_RANGE["HEIGHT"]["MAX"] * LENGHT_RANGE["DEPTH"]["MAX"])/2:
             self.packaging_time = np.random.randint(*config["SMALL_PACKAGING_TIME_RANGE"])  # 포장 시간
 
@@ -293,7 +376,7 @@ class Cost:
                 instance.env.now - instance.holding_cost_last_updated)
         elif cost_type == "Printing cost":
             # Calculate processing cost
-            DAILY_COST_REPORT[cost_type] += (instance.volume + instance.build_time) * COST_TYPES[0]['PRINTING_COST']  # Example formula
+            DAILY_COST_REPORT[cost_type] += instance.order_build_time * COST_TYPES[0]['PRINTING_COST']  # Example formula
         elif cost_type == "Post Processing cost":
             # Calculate delivery cost
             DAILY_COST_REPORT[cost_type] += instance.post_processing_time * COST_TYPES[0]['POSTPROCESSING_COST']  # Example formula
@@ -359,18 +442,18 @@ class Satisfication:
 def create_env(daily_events):
     simpy_env = simpy.Environment()
 
-    # simpy.Store를 사용하여 Job 대기열 생성 (무제한 크기)
-    job_store = simpy.Store(simpy_env)
+    # 주문(order)을 위한 store (배치 단위로 들어갈 예정)
+    order_store = simpy.Store(simpy_env)
     
     satisfication = Satisfication(simpy_env, daily_events)
     packaging = Packaging(simpy_env, COST_TYPES[0]['PACKAGING_COST'], daily_events, satisfication)
     post_processor = PostProcessing(simpy_env, COST_TYPES[0]['POSTPROCESSING_COST'], daily_events, packaging)
-    customer = Customer(simpy_env, COST_TYPES[0]['SHORTAGE_COST'], daily_events, satisfication, job_store)
+    customer = Customer(simpy_env, COST_TYPES[0]['SHORTAGE_COST'], daily_events, satisfication, order_store)
     display = Display(simpy_env, daily_events)
     
     # 각 프린터 생성 시 job_store 전달
     printers = [
-        Printer(simpy_env, COST_TYPES[0]['PRINTING_COST'], daily_events, pid, post_processor, job_store)
+        Printer(simpy_env, COST_TYPES[0]['PRINTING_COST'], daily_events, pid, post_processor, order_store)
         for pid in PRINTERS.keys()
     ]
 
@@ -382,10 +465,13 @@ def simpy_event_processes(simpy_env, packaging, post_processor, customer, displa
     """
     SimPy 이벤트 프로세스를 설정합니다.
     """
-    # Day 추적 및 Job 생성 프로세스 추가
+    # Day 추적 및 order 생성 프로세스 실행
     simpy_env.process(display.track_days())
-    simpy_env.process(customer.create_jobs_continuously())
+    simpy_env.process(customer.create_orders_continuously())
 
-    # 각 프린터의 작업 처리 프로세스 추가
+    # 각 프린터의 주문배치 처리 프로세스 추가
     for printer in printers:
-        simpy_env.process(printer.process_jobs())
+        simpy_env.process(printer.process_order_batch())
+
+    # Packaging의 주문(또는 Job) 처리 프로세스 실행 (포장 방식에 따라 수정)
+    simpy_env.process(packaging.process_orders())

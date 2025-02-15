@@ -80,6 +80,11 @@ COST_TYPES = {
     }
 }
 
+CUSTOMER = {
+    "ORDER_LIST_SIZE": 20,
+     "JOB_SIZE": 2
+     }
+
 # 3D 프린터 정보 설정, VOL: WIDTH * HEIGHT * DEPTH / 단위: mm
 PRINTERS = {
     0: {"ID": 0}, 
@@ -89,15 +94,26 @@ PRINTERS = {
     4: {"ID": 4}
 }
 
-PRINTERS_SIZE = {"VOL": 16777216, "WIDTH": 256, "HEIGHT": 256, "DEPTH": 256}
+# unit: mm
+PRINTERS_SIZE = {"VOL": 669130000, "WIDTH": 1540, "HEIGHT": 790, "DEPTH": 550}
 
-PRINTERS_INVEN = []
+WASHING_MACHINE = {
+    0: {"ID": 0, "WASHING_SIZE": 2},
+    1: {"ID": 1, "WASHING_SIZE": 2}
+}
+
+AIR_DRY_MACHINE = {
+    0: {"ID": 0, "DRYING_SIZE": 3},
+    1: {"ID": 1, "DRYING_SIZE": 3}
+}
 
 POST_PROCESSING_WORKER = {
-    0: {'ID': 0},
-    1: {'ID': 1},
+    0: {"ID": 0},
+    1: {"ID": 1},
     2: {"ID": 2},
-    3: {"ID": 3}
+    3: {"ID": 3},
+    4: {"ID": 4},
+    5: {"ID": 5}
 }
 
 PACKAGING_MACHINE = {
@@ -105,8 +121,6 @@ PACKAGING_MACHINE = {
     1: {"ID": 1},
     2: {"ID": 2}
 }
-
-JOB_LOT_SIZE = 20
 
 DISPATCHING_RULE = {
     "FIFO" : False,
