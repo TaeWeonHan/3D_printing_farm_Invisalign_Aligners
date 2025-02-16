@@ -36,31 +36,50 @@ SIM_TIME = 2  # 시뮬레이션 기간 (일 단위)
 JOB_CREATION_INTERVAL = 1  # 평균 1시간 간격으로 Job 생성
 
 # MIN, MAX RANGE / 단위: mm
-LENGHT_RANGE = {
-    "WIDTH": {
-        "MIN": 10,
-        "MAX": 260
+RANGE_CONTROLLA = {
+    "LENGHT_RANGE" : {
+        "WIDTH": {
+            "MIN": 10,
+            "MAX": 15
+        },
+        "HEIGHT": {
+            "MIN": 10,
+            "MAX": 15
+        },
+        "DEPTH": {
+            "MIN": 10,
+            "MAX": 15
+        }
     },
-    "HEIGHT": {
-        "MIN": 10,
-        "MAX": 260
-    },
-    "DEPTH": {
-        "MIN": 10,
-        "MAX": 260
+    "TIME_RANGE" : {
+        "SMALL_PACKAGING_TIME": {
+            "MIN": 10,
+            "MAX": 20
+        },
+        "LARGE_PACKAGING_TIME": {
+            "MIN": 20,
+            "MAX": 30
+        }
+        ,"WASHING_TIME": {
+            "MIN": 10,
+            "MAX": 15
+        }
     }
 }
+
+
 # Job의 속성 정의
 JOB_TYPES = {
     "DEFAULT": {
-        "WIDTH_RANGE": (LENGHT_RANGE["WIDTH"]["MIN"], LENGHT_RANGE["WIDTH"]["MAX"]), # 단위: mm
-        "HEIGHT_RANGE": (LENGHT_RANGE["HEIGHT"]["MIN"], LENGHT_RANGE["HEIGHT"]["MAX"]), # 단위: mm
-        "DEPTH_RANGE": (LENGHT_RANGE["DEPTH"]["MIN"], LENGHT_RANGE["DEPTH"]["MAX"]), # 단위: mm
+        "WIDTH_RANGE": (RANGE_CONTROLLA["LENGHT_RANGE"]["WIDTH"]["MIN"], RANGE_CONTROLLA["LENGHT_RANGE"]["WIDTH"]["MAX"]), # 단위: mm
+        "HEIGHT_RANGE": (RANGE_CONTROLLA["LENGHT_RANGE"]["HEIGHT"]["MIN"], RANGE_CONTROLLA["LENGHT_RANGE"]["HEIGHT"]["MAX"]), # 단위: mm
+        "DEPTH_RANGE": (RANGE_CONTROLLA["LENGHT_RANGE"]["DEPTH"]["MIN"], RANGE_CONTROLLA["LENGHT_RANGE"]["DEPTH"]["MAX"]), # 단위: mm
         "POST_PROCESSING_TIME_COEFFICIENT": 30,  # 후처리 시간 범위
-        "SMALL_PACKAGING_TIME_RANGE": (10, 20),  # SMALL 제품 포장시간 범위
-        "LARGE_PACKAGING_TIME_RANGE": (20, 30),  # LARGE 제품 포장시간 범위
+        "SMALL_PACKAGING_TIME_RANGE": (RANGE_CONTROLLA["TIME_RANGE"]["SMALL_PACKAGING_TIME"]["MIN"], RANGE_CONTROLLA["TIME_RANGE"]["SMALL_PACKAGING_TIME"]["MAX"]),  # SMALL 제품 포장시간 범위
+        "LARGE_PACKAGING_TIME_RANGE": (RANGE_CONTROLLA["TIME_RANGE"]["LARGE_PACKAGING_TIME"]["MIN"], RANGE_CONTROLLA["TIME_RANGE"]["LARGE_PACKAGING_TIME"]["MAX"]),  # LARGE 제품 포장시간 범위
         "FILAMENT_DIAMETER": 1.75,
-        "BUILD_SPEED": 3600 # mm/min
+        "BUILD_SPEED": 3600,
+        "WASHING_RANGE": (RANGE_CONTROLLA["TIME_RANGE"]["WASHING_TIME"]["MIN"], RANGE_CONTROLLA["TIME_RANGE"]["WASHING_TIME"]["MAX"])
     }
 }
 
@@ -73,6 +92,8 @@ COST_TYPES = {
     0: {
         'HOLDING_COST': 0.1,
         'PRINTING_COST': 1,
+        'WASHING_COST': 1,
+        'DRYING_COST': 1,
         'POSTPROCESSING_COST': 1,
         'PACKAGING_COST': 1,
         'DELIVERY_COST': 1,
@@ -95,14 +116,14 @@ PRINTERS = {
 }
 
 # unit: mm
-PRINTERS_SIZE = {"VOL": 669130000, "WIDTH": 1540, "HEIGHT": 790, "DEPTH": 550}
+PRINTERS_SIZE = {"VOL": 669130000, "WIDTH": 1540, "HEIGHT": 790, "DEPTH": 550, "SET_UP": 10, "CLOSING": 30}
 
 WASHING_MACHINE = {
     0: {"ID": 0, "WASHING_SIZE": 2},
     1: {"ID": 1, "WASHING_SIZE": 2}
 }
 
-AIR_DRY_MACHINE = {
+DRY_MACHINE = {
     0: {"ID": 0, "DRYING_SIZE": 3},
     1: {"ID": 1, "DRYING_SIZE": 3}
 }
