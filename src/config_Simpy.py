@@ -1,4 +1,3 @@
-
 import numpy as np  # numpy 모듈로 수정
 import random
 
@@ -33,7 +32,7 @@ import random
 SIM_TIME = 2  # 시뮬레이션 기간 (일 단위)
 
 # Job 생성 파라미터 설정
-JOB_CREATION_INTERVAL = 1  # 평균 1시간 간격으로 Job 생성
+JOB_CREATION_INTERVAL = 3  # 평균 1시간 간격으로 Job 생성
 
 # MIN, MAX RANGE / 단위: mm
 RANGE_CONTROLLA = {
@@ -102,7 +101,7 @@ COST_TYPES = {
 }
 
 CUSTOMER = {
-    "ORDER_LIST_SIZE": 20,
+    "ORDER_LIST_SIZE": 2,
      "JOB_SIZE": 2
      }
 
