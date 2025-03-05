@@ -101,8 +101,8 @@ COST_TYPES = {
 }
 
 CUSTOMER = {
-    "ORDER_LIST_SIZE": 2,
-     "JOB_SIZE": 2
+    "JOB_LIST_SIZE": 2,
+     "ITEM_SIZE": 2
      }
 
 # 3D 프린터 정보 설정, VOL: WIDTH * HEIGHT * DEPTH / 단위: mm

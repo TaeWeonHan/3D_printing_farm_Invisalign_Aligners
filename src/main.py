@@ -27,9 +27,9 @@ for day in range(SIM_TIME):
         for cost_type, cost_value in DAILY_COST_REPORT.items():
             print(f"{cost_type}: ${cost_value:.2f}")
     print(f"\n===== JOB LOG for Day {day + 1} =====")
-    for job in JOB_LOG:
+    for job in ITEM_LOG:
         if job['day'] == day + 1:
-            print(f"Job {job['job_id']} | Width: {job['width']} x Height: {job['height']} x Depth: {job['depth']} = Volume: {job['volume']:.2f} | "
+            print(f"Item {job['job_id']}-{job['item_id']} | Width: {job['width']} x Height: {job['height']} x Depth: {job['depth']} = Volume: {job['volume']:.2f} | "
                   f"Creation Time: {job['create_time']:.4f} | "
                   f"Build Time: {job['build_time']} | Post-Processing Time: {job['post_processing_time']} | "
                   f"Packaging Time: {job['packaging_time']}")
@@ -41,7 +41,7 @@ for day in range(SIM_TIME):
 
 # 추가 작업 처리: 아직 처리 중인 주문이나 대기열이 있다면 (예: Customer의 order_store, Washing의 common_queue, Packaging의 queue, Packaging 작업자)
 day = SIM_TIME + 1
-while (customer.order_store.items or washing_machine.common_queue or packaging.queue or 
+while (customer.job_store.items or washing_machine.common_queue or packaging.queue or 
        any(worker["is_busy"] for worker in packaging.workers.values())):
     simpy_env.run(until=simpy_env.now + 24)
 
@@ -53,8 +53,8 @@ while (customer.order_store.items or washing_machine.common_queue or packaging.q
         print(f"\n===== Additional Cost Report for Day {day} =====")
         for cost_type, cost_value in DAILY_COST_REPORT.items():
             print(f"{cost_type}: ${cost_value:.2f}")
-    print(f"\n===== JOB LOG for Additional Day {day} =====")
-    for job in JOB_LOG:
+    print(f"\n===== ITEM LOG for Additional Day {day} =====")
+    for job in ITEM_LOG:
         if job['day'] == day:
             print(f"Job {job['job_id']} | Volume: {job['volume']:.2f} | "
                   f"Build Time: {job['build_time']} | Post-Processing Time: {job['post_processing_time']} | "
@@ -67,9 +67,9 @@ while (customer.order_store.items or washing_machine.common_queue or packaging.q
     day += 1
 
 # 시뮬레이션 종료 후 전체 JOB_LOG 출력
-print("\n============= Final JOB LOG =============")
-for job in JOB_LOG:
-    print(f"Day {job['day']} | Job {job['job_id']} | Volume: {job['volume']:.2f} | "
+print("\n============= Final ITEM LOG =============")
+for job in ITEM_LOG:
+    print(f"Day {job['day']} | Item {job['job_id']}-{job['item_id']} | Volume: {job['volume']:.2f} | "
           f"Build Time: {job['build_time']} | Post-Processing Time: {job['post_processing_time']} | "
           f"Packaging Time: {job['packaging_time']}")
 
