@@ -69,8 +69,10 @@ class Job:
         self.job_id = job_id
         self.items = items  # 전문 job에 포함된 Item(구 Job) 리스트 (초기에는 빈 리스트)
         self.create_time = create_time  # 전문 job 생성 시점
-        self.job_build_time = 1  # 기존 order_build_time → job_build_time
-        self.pallet_washing_time = np.random.randint(JOB_TYPES["DEFAULT"]["WASHING_RANGE"])
+        self.build_time = None       
+        self.washing_time = None     
+        self.drying_time = None      
+        self.packaging_time = None 
 
 
 # Customer 클래스: 지속적으로 전문 job(작업)을 생성
@@ -162,10 +164,9 @@ class Customer:
                     item.height <= PRINTERS_SIZE["HEIGHT"] and
                     item.depth <= PRINTERS_SIZE["DEPTH"]):
                     new_job.items.append(item)
+                
                 else:
-                    self.daily_events.append(
-                        f"Item {item.item_id} could not be assigned: No suitable printer available (Item size: {item.volume:.2f})"
-                    )
+                    self.daily_events.append(f"Item {item.item_id} could not be assigned: No suitable printer available (Item size: {item.volume:.2f})")
                     item.shortage = 1
                     if PRINT_SIM_COST:
                         Cost.cal_cost(item, "Shortage cost")
@@ -409,13 +410,13 @@ class Proc_Drying:
                 granted_machine_id = machine_id
             else:
                 req.cancel()
-        
+        """
         if granted_machine_id is None:
             self.daily_events.append(
                 f"{int(self.env.now % 24)}:{int((self.env.now % 1) * 60):02d} - Job {job.job_id} did not get a Drying Machine!"
             )
             return
-        
+        """
         self.daily_events.append(
             f"{int(self.env.now % 24)}:{int((self.env.now % 1) * 60):02d} - Job {job.job_id} is being dried on Drying Machine {granted_machine_id}."
         )
@@ -564,28 +565,20 @@ class Proc_Packaging:
 class Item:
     def __init__(self, env, item_id, config, job_id=None):
         self.env = env
-        self.item_id = item_id  # Item ID (이전 Job ID)
-        self.job_id = job_id    # 부모 전문 job의 ID (이전 Order의 ID)
+        self.item_id = item_id
+        self.job_id = job_id
         self.create_time = env.now
         self.height = np.random.randint(*config["HEIGHT_RANGE"])
         self.width = np.random.randint(*config["WIDTH_RANGE"])
         self.depth = np.random.randint(*config["DEPTH_RANGE"])
         self.volume = self.height * self.width * self.depth
         
-        # 인쇄 시간
-        self.build_time = 1
-        # 후처리 시간
-        self.post_processing_time = 1
+        # 각 단계별 처리 시간 (빌드, 후처리)
+        self.build_time = None      
+        self.post_processing_time = None  
         
-        # 포장 시간 결정 (예시)
-        if self.volume <= (RANGE_CONTROLLA["LENGHT_RANGE"]["WIDTH"]["MAX"] *
-                           RANGE_CONTROLLA["LENGHT_RANGE"]["HEIGHT"]["MAX"] *
-                           RANGE_CONTROLLA["LENGHT_RANGE"]["DEPTH"]["MAX"]) / 2:
-            self.packaging_time = 1
-        else:
-            self.packaging_time = 1
-        
-        self.due_date = self.create_time + self.build_time + self.post_processing_time + self.packaging_time
+        # 기타 속성 (예: 비용, due date 등 필요시 추가)
+        self.due_date = None
         
         # 비용 항목 초기화
         self.printing_cost = 0
