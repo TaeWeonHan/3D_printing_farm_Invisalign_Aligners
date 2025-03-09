@@ -1,44 +1,31 @@
 ```mermaid
 sequenceDiagram
-    participant Cust as Customer
-    participant Job as Job
-    participant Item as Item
-    participant Store as Job_Store
-    participant Prin as Proc_Printer
-    participant Wash as Proc_Washing
-    participant Dry as Proc_Drying
-    participant Post as Proc_PostProcessing
-    participant Pack as Proc_Packaging
-
-    %% Customer가 Job 생성 후, 내부에 Item들을 생성하여 추가
-    Cust->>Job: new Job(job_id, [], current_time)
-    loop For each item (CUSTOMER["ITEM_SIZE"])
-        Cust->>Item: new Item(item_id, config, job_id)
-        Cust->>Job: add Item to job.items
-    end
-    Cust->>Cust: temp_job_list.append(job)
-    %% 배치 수가 충족되면 Job_Store에 전달
-    Cust->>Store: put(job) (for each job in temp_job_list)
+    participant C as Customer
+    participant P as Proc_Printer
+    participant W as Proc_Washing
+    participant D as Proc_Drying
+    participant PP as Proc_PostProcessing
+    participant PA as Proc_Packaging
+    participant Disp as Display
     
-    %% Printer가 Job을 받아 처리 시작
-    Prin->>Store: get() job
-    Prin->>Prin: process_job(job)
-    Prin->>Prin: seize(job) [세팅 단계]
-    Prin->>Prin: delay(job) [인쇄 진행]
-    Prin->>Prin: release(job) [마무리 및 비용 계산]
-    
-    %% 인쇄 완료 후 Washing으로 전달
-    Prin->>Wash: assign_job(job)
-    Wash->>Wash: add job to common_queue & try_process_jobs()
-    Wash->>Wash: _washing_job(machine_id, jobs_batch)
-    
-    %% Washing 완료 후 Drying 단계 호출
-    Wash->>Dry: call _drying_job(job)
-    Dry->>Dry: request drying resource & process drying
-    
-    %% Drying 완료 후 PostProcessing로 전달
-    Dry->>Post: process_job(job)
-    
-    %% 후처리 완료 후 Packaging으로 Job 전달
-    Post->>Pack:
+    Note over C,Disp: Job 생성 및 일별 보고서 기록
+    C->>P: Submit Job (printer_store.put)
+    P->>P: Seize job, compute build_time
+    P->>P: Delay (Printing: setup, build, closing)
+    P->>W: Release job (washing_store.put)
+    Note over W: Washing Phase
+    W->>W: Seize job from washing_store, assign to machine batch \n If batch == capacity then Delay (Washing processing)
+    W->>W: Delay washing processing
+    W->>W: Release if washing queue is exist, process washing
+    W->>D: Release washing machine and job release \n -> drying_store.put(job)
+    Note over D: Drying Phase
+    D->>D: Seize job from drying_store, assign to machine batch \n If batch == capacity then Delay (Drying processing)
+    D->>D: Delay drying processing
+    D->>D: Release if drying queue is exist, process drying
+    D->>PP: Release After delay, call release() \n -> job sent for PostProcessing
+    Note over PP: PostProcessing Phase
+    PP->>PP: Process job items sequentially
+    PP->>PA: When complete, send job to Packaging
+    Note over PA: Packaging Phase
+    PA->>PA: Process job packaging
 ```

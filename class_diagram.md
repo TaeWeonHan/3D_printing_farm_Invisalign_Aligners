@@ -1,122 +1,123 @@
 ```mermaid
 classDiagram
-    %% 고객이 Job을 생성하고, Job이 여러 Item을 포함하는 관계를 명시 (composition)
-    class Customer {
-      - env: simpy.Environment
-      - daily_events: list
-      - current_item_id: int
-      - current_job_id: int
-      - unit_shortage_cost: float
-      - satisfication: Satisfication
-      - job_store: simpy.Store
-      - temp_job_list: list
-      + create_jobs_continuously()
-    }
-
-    class Job {
-      - job_id: int
-      - items: list~Item~
-      - create_time: float
-      - job_build_time: int
-      - pallet_washing_time: int
-    }
-
-    class Item {
-      - env: simpy.Environment
-      - item_id: int
-      - job_id: int
-      - create_time: float
-      - height: int
-      - width: int
-      - depth: int
-      - volume: int
-      - build_time: int
-      - post_processing_time: int
-      - packaging_time: int
-      - due_date: float
-      - printing_cost: float
-      - post_processing_cost: float
-      - packaging_cost: float
-      - delivery_cost: float
-      - shortage_cost: float
-      - shortage: int
-    }
-
     class Display {
-      - env: simpy.Environment
-      - daily_events: list
-      + track_days()
+        +env : Environment
+        +daily_events : list
+        +track_days()
     }
-
-    class Proc_Printer {
-      - env: simpy.Environment
-      - daily_events: list
-      - printer_id: int
-      - is_busy: bool
-      - washing_machine: Proc_Washing
-      - unit_printing_cost: float
-      - job_store: simpy.Store
-      + process_jobs()
-      + process_job(job)
-      + seize(job)
-      + delay(job)
-      + release(job)
-    }
-
-    class Proc_Washing {
-      - env: simpy.Environment
-      - daily_events: list
-      - unit_washing_cost: float
-      - dry_machine: Proc_Drying
-      - machines_capa: dict
-      - available_machines: list
-      - common_queue: list
-      + assign_job(job)
-      + try_process_jobs()
-      + _washing_job(machine_id, jobs_batch)
-    }
-
-    class Proc_Drying {
-      - env: simpy.Environment
-      - daily_events: list
-      - unit_drying_cost: float
-      - post_processor: Proc_PostProcessing
-      - machines: dict
-      + _drying_job(job)
-    }
-
-    class Proc_PostProcessing {
-      - env: simpy.Environment
-      - daily_events: list
-      - unit_post_processing_cost: float
-      - packaging: Proc_Packaging
-      - worker_store: simpy.Store
-    }
-
-    class Proc_Packaging {
-      - env: simpy.Environment
-      - daily_events: list
-      - unit_packaging_cost: float
-      - workers: dict
-      - queue: list
-      - satisfication: Satisfication
-    }
-
-    class Cost {
     
+    class Job {
+        +job_id
+        +items : list
+        +create_time
+        +build_time
+        +washing_time
+        +drying_time
+        +packaging_time
     }
-
+    
+    class Customer {
+        +env : Environment
+        +daily_events : list
+        +current_item_id : int
+        +current_job_id : int
+        +printer_store : Store
+        +temp_job_list : list
+        +create_jobs_continuously()
+    }
+    
+    class Proc_Printer {
+        +env : Environment
+        +daily_events : list
+        +printer_id
+        +is_busy : bool
+        +printer_store : Store
+        +washing_store : Store
+        +seize()
+        +delay(job)
+        +release(job)
+    }
+    
+    class Proc_Washing {
+        +env : Environment
+        +daily_events : list
+        +unit_washing_cost
+        +dry_machine : Proc_Drying
+        +washing_store : Store
+        +drying_store : Store
+        +machines : dict
+        +waiting_queue : list
+        +seize()
+        +delay(machine_id, jobs_batch)
+        +release(machine_id, jobs_batch)
+    }
+    
+    class Proc_Drying {
+        +env : Environment
+        +daily_events : list
+        +unit_drying_cost
+        +post_processor : Proc_PostProcessing
+        +drying_store : Store
+        +machines : dict
+        +waiting_queue : list
+        +seize()
+        +delay(machine_id, jobs_batch)
+        +release(machine_id, jobs_batch)
+    }
+    
+    class Proc_PostProcessing {
+        +env : Environment
+        +daily_events : list
+        +unit_post_processing_cost
+        +packaging : Proc_Packaging
+        +worker_store : Store
+        +process_job(job)
+        +_process_item(item)
+    }
+    
+    class Proc_Packaging {
+        +env : Environment
+        +daily_events : list
+        +unit_packaging_cost
+        +workers : dict
+        +queue : list
+        +assign_job(job)
+        +process_job(job, worker_id)
+    }
+    
+    class Item {
+        +env : Environment
+        +item_id
+        +job_id
+        +create_time
+        +height
+        +width
+        +depth
+        +volume
+        +build_time
+        +post_processing_time
+        +packaging_time
+    }
+    
+    class Cost {
+        <<static>>
+        +cal_cost(instance, cost_type)
+        +update_cost_log()
+        +clear_cost()
+    }
+    
     class Satisfication {
-
+        +env : Environment
+        +daily_events : list
+        +total_satisfication : float
+        +cal_satisfication(job, end_time)
     }
-
-    %% 관계 표현
+    
     Customer --> Job : creates
-    Job o-- Item : contains
-    Customer --> Satisfication : uses
-    Proc_Printer --> Proc_Washing : calls
-    Proc_Washing --> Proc_Drying : calls
-    Proc_Drying --> Proc_PostProcessing : calls
-    Proc_PostProcessing --> Proc_Packaging : calls
-    Proc_Packaging --> Satisfication : uses
+    Proc_Printer --> Proc_Washing : sends job via washing_store
+    Proc_Washing --> Proc_Drying : sends job via drying_store
+    Proc_Drying --> Proc_PostProcessing : sends job for PostProcessing
+    Proc_PostProcessing --> Proc_Packaging : sends job for packaging
+    Item <.. Job : contains
+    Satisfication <.. Customer : monitors satisfaction
 ```
