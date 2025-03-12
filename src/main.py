@@ -12,7 +12,7 @@ import visualization
 
 # Step 2: SimPy 이벤트 프로세스 설정
 # (PostProcessing는 Drying에서 호출되고, Packaging는 PostProcessing 내부로 전달되므로 별도 실행은 필요하지 않습니다.)
-env.simpy_event_processes(simpy_env, packaging, post_processor, customer, display, printers, daily_events)
+env.simpy_event_processes(simpy_env, packaging, post_processor, customer, display, printers, washing_machine, dry_machine, daily_events)
 
 # Step 3: 시뮬레이션 실행 (하루 단위)
 for day in range(SIM_TIME):
@@ -31,8 +31,7 @@ for day in range(SIM_TIME):
         if job['day'] == day + 1:
             print(f"Item {job['job_id']}-{job['item_id']} | Width: {job['width']} x Height: {job['height']} x Depth: {job['depth']} = Volume: {job['volume']:.2f} | "
                   f"Creation Time: {job['create_time']:.4f} | "
-                  f"Build Time: {job['build_time']} | Post-Processing Time: {job['post_processing_time']} | "
-                  f"Packaging Time: {job['packaging_time']}")
+                  f"Build Time: {job['build_time']} | Post-Processing Time: {job['post_processing_time']}")
     if PRINT_SATISFICATION:
         print(f"\n===== Total Satisfication for Day {day + 1}: {satisfication.total_satisfication:.4f} =====\n")
 
@@ -57,8 +56,7 @@ while (customer.job_store.items or washing_machine.common_queue or packaging.que
     for job in ITEM_LOG:
         if job['day'] == day:
             print(f"Job {job['job_id']} | Volume: {job['volume']:.2f} | "
-                  f"Build Time: {job['build_time']} | Post-Processing Time: {job['post_processing_time']} | "
-                  f"Packaging Time: {job['packaging_time']}")
+                  f"Build Time: {job['build_time']} | Post-Processing Time: {job['post_processing_time']}")
     if PRINT_SATISFICATION:
         print(f"\n===== Total Satisfication for Day {day}: {satisfication.total_satisfication:.4f} =====\n")
 
@@ -70,8 +68,7 @@ while (customer.job_store.items or washing_machine.common_queue or packaging.que
 print("\n============= Final ITEM LOG =============")
 for job in ITEM_LOG:
     print(f"Day {job['day']} | Item {job['job_id']}-{job['item_id']} | Volume: {job['volume']:.2f} | "
-          f"Build Time: {job['build_time']} | Post-Processing Time: {job['post_processing_time']} | "
-          f"Packaging Time: {job['packaging_time']}")
+          f"Build Time: {job['build_time']} | Post-Processing Time: {job['post_processing_time']}")
 
 # DAILY_REPORTS 데이터를 DataFrame으로 변환 및 CSV 파일로 저장
 print(DAILY_REPORTS)

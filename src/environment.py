@@ -71,7 +71,8 @@ class Job:
         self.create_time = create_time  # 전문 job 생성 시점
         self.build_time = None       
         self.washing_time = None     
-        self.drying_time = None      
+        self.drying_time = None
+        self.completed_postprocessing = 0  # 후처리 완료된 Item 수      
         self.packaging_time = None 
 
 
@@ -143,6 +144,7 @@ class Customer:
             for _ in range(CUSTOMER["ITEM_SIZE"]):
                 item = Item(self.env, self.current_item_id, JOB_TYPES["DEFAULT"], job_id=new_job.job_id)
                 self.current_item_id += 1
+                item.job = new_job  # 각 Item이 소속된 Job 참조 추가
 
                 # JOB_LOG (이제 ITEM_LOG) 기록: 부모 전문 job의 ID와 생성된 Item의 ID 기록
                 ITEM_LOG.append({
@@ -156,7 +158,6 @@ class Customer:
                     'volume': item.volume,
                     'build_time': item.build_time,
                     'post_processing_time': item.post_processing_time,
-                    'packaging_time': item.packaging_time
                 })
 
                 # 생성된 Item이 프린터 크기 조건에 부합하면 Job에 추가, 아니면 부족 처리
@@ -189,7 +190,7 @@ class Customer:
             yield self.env.timeout(interval)
 
 # Printer 클래스: 프린터의 작업 처리
-class Proc_Printer:
+class Proc_Build:
     """
     프린터 작업 처리 클래스
     전문 job을 받아서 세 단계(자원 할당/세팅 → 인쇄 → 마무리)로 처리한 후,
@@ -535,7 +536,7 @@ class Proc_Drying:
         
         # 건조 완료된 job들을 후처리 단계로 전달합니다.
         for job in jobs_batch:
-            self.post_processor.env.process(self.post_processor.process_job(job))
+            self.post_processor.seize(job)
         
         # 머신이 free인 경우, waiting_queue에서 job들을 가져와 배치에 추가합니다.
         while (self.waiting_queue and 
@@ -558,50 +559,60 @@ class Proc_PostProcessing:
     """
     PostProcessing 클래스
     -----------------------
-    drying 단계에서 전달된 job(여러 item 포함)을 받아, 각 item에 대해 후처리 작업을 수행합니다.
-    각 item은 사용 가능한 작업자에게 즉시 할당되며, 모든 작업자가 바쁘면 대기열에 저장됩니다.
-    후처리 완료된 item은 Packaging 단계로 바로 전달됩니다.
+    Drying 단계에서 전달된 Job(여러 Item 포함)을 받아,
+    각 Item에 대해 후처리 작업을 수행합니다.
+    - 사용 가능한 작업자(worker)가 있으면 즉시 후처리 프로세스(delay)를 실행합니다.
+    - 모든 작업자가 바쁘면 해당 Item을 대기열(queue)에 저장합니다.
+    - 각 Item의 후처리 완료 시, 소속 Job의 후처리 완료 카운트를 증가시키고,
+      모든 Item의 후처리가 완료되면 Job 전체를 Packaging 단계로 전달합니다.
     """
     def __init__(self, env, post_processing_cost, daily_events, packaging):
         """
-        __init__ 메서드 (생성자)
+        생성자 (__init__)
         -------------------------
-        env: SimPy 환경 객체 (시뮬레이션 시간 및 이벤트 관리)
-        post_processing_cost: 후처리 비용 단위
-        daily_events: 일별 이벤트 로그 리스트 (이벤트 기록용)
-        packaging: Packaging 단계 객체 참조 (후처리 완료된 item 전달용)
+        매개변수:
+            env: SimPy 환경 객체 (시뮬레이션 시간 및 이벤트 관리를 담당)
+            post_processing_cost: 후처리 비용 단위 (비용 계산에 사용)
+            daily_events: 일별 이벤트 로그 리스트 (시뮬레이션 이벤트 기록용)
+            packaging: Packaging 단계 객체 참조 (후처리 완료된 Job 전달용)
         """
         self.env = env
         self.daily_events = daily_events
-        # 각 작업자의 사용 가능 여부를 관리 (POST_PROCESSING_WORKER의 키 사용)
+        # 후처리 작업자를 관리하는 딕셔너리: 각 작업자는 사용 가능 여부(is_busy)로 관리
         self.workers = {worker_id: {"is_busy": False} for worker_id in POST_PROCESSING_WORKER.keys()}
-        self.queue = []  # 모든 작업자가 바쁠 때 후처리할 item들을 저장하는 대기열
-        self.packaging = packaging  # Packaging 객체 참조
+        # 모든 작업자가 바쁠 경우 후처리할 Item을 저장할 대기열
+        self.queue = []
+        # Packaging 단계 객체 참조
+        self.packaging = packaging
         self.unit_post_processing_cost = post_processing_cost
 
     def seize(self, job):
         """
         seize 메서드
         ------------------
-        drying 단계에서 전달된 job을 받아, job 내의 각 item에 대해 후처리 작업을 할당합니다.
-        사용 가능한 작업자가 있으면 바로 후처리 프로세스(delay)를 시작하고,
-        만약 모든 작업자가 사용 중이면 해당 item은 대기열에 저장됩니다.
+        drying 단계에서 전달된 Job 객체 내의 각 Item에 대해 후처리 작업을 할당합니다.
+        
+        동작:
+          - Job 객체에 포함된 각 Item에 대해, 사용 가능한 작업자(worker)를 탐색합니다.
+          - 사용 가능한 작업자가 있으면 해당 작업자를 busy 상태로 전환한 후, 후처리 프로세스(delay)를 시작합니다.
+          - 만약 모든 작업자가 바쁘다면, 해당 Item을 대기열(queue)에 추가하고 이벤트 로그에 기록합니다.
         
         매개변수:
-            job: 후처리할 item들을 포함한 job 객체
+            job: 후처리할 Item들을 포함한 Job 객체
         """
-        # job 내의 각 item에 대해 후처리 작업 할당 시도
+        # Job에 포함된 각 Item 처리
         for item in job.items:
-            assigned = False
+            assigned = False  # 작업 할당 여부 플래그
             for worker_id, worker in self.workers.items():
                 if not worker["is_busy"]:
-                    # 사용 가능한 작업자를 찾으면 busy 상태로 변경하고 delay 프로세스 시작
+                    # 사용 가능한 작업자를 찾은 경우,
+                    # 작업자를 busy 상태로 전환하고 후처리 delay 프로세스 시작
                     self.workers[worker_id]["is_busy"] = True
                     self.env.process(self.delay(worker_id, item))
                     assigned = True
-                    break
+                    break  # 하나의 작업자 할당 후 바로 다음 Item 처리
             if not assigned:
-                # 모든 작업자가 바쁘면 해당 item을 대기열에 추가
+                # 모든 작업자가 바쁜 경우, 해당 Item을 대기열에 추가
                 self.daily_events.append(
                     f"{int(self.env.now % 24)}:{int((self.env.now % 1) * 60):02d} - All workers busy. Item {item.item_id} of Job {item.job_id} added to waiting queue."
                 )
@@ -611,45 +622,60 @@ class Proc_PostProcessing:
         """
         delay 메서드
         -------------------
-        개별 item의 후처리 작업을 수행하기 위해, item의 후처리 시간만큼 대기하는 프로세스입니다.
-        delay가 완료되면 release 메서드를 호출하여 후처리 완료 후의 후속 작업을 처리합니다.
-        후처리 완료 로그 기록 및 DAILY_REPORTS에 기록      
+        지정된 작업자(worker)가 해당 Item의 후처리 작업을 수행하도록 delay(지연) 프로세스를 실행합니다.
+        
+        동작:
+          - 후처리 작업 시작 시각을 기록하고, 시작 이벤트 로그를 남깁니다.
+          - 만약 Item에 후처리 시간이 설정되어 있지 않으면 기본값 1로 설정합니다.
+          - 설정된 후처리 시간만큼 SimPy 환경에서 대기합니다.
+          - 후처리 작업 완료 시각을 기록하고, 종료 이벤트 로그를 남깁니다.
+          - 후처리 작업이 끝나면 release 메서드를 호출하여 후속 처리를 진행합니다.
+        
         매개변수:
-            worker_id: 작업을 수행할 작업자의 ID
-            item: 후처리 대상 item (job에 속한 item) 객체
+            worker_id: 후처리 작업을 수행할 작업자의 ID
+            item: 후처리 대상 Item (해당 Item은 Job에 소속되어 있음)
         """
+        # 후처리 시작 시간 기록
         start_time = self.env.now
         self.daily_events.append(
             f"{int(self.env.now % 24)}:{int((self.env.now % 1) * 60):02d} - Item {item.item_id} of Job {item.job_id} is starting on Worker {worker_id} (Post-processing)"
         )
-        # item의 후처리 시간 설정 (없으면 기본값 1)
+        # Item에 후처리 시간이 없으면 기본값 1 할당
         if not hasattr(item, "post_processing_time") or item.post_processing_time is None:
             item.post_processing_time = 1
-        # 후처리 시간만큼 대기 (delay)
+        # 후처리 시간만큼 SimPy 환경에서 대기
         yield self.env.timeout(item.post_processing_time)
+        # 후처리 완료 시각 기록
         end_time = self.env.now
         self.daily_events.append(
             f"{int(self.env.now % 24)}:{int((self.env.now % 1) * 60):02d} - Item {item.item_id} of Job {item.job_id} is finishing on Worker {worker_id} (Post-processing)"
         )
-        # delay가 완료되면 release 메서드 호출
-        yield self.env.process(self.release(worker_id, item, start_time, end_time))
+        # 후처리 완료 후 release 메서드를 호출하여 후속 작업 처리
+        self.release(worker_id, item, start_time, end_time)
 
     def release(self, worker_id, item, start_time, end_time):
         """
         release 메서드
         -------------------
-        delay가 완료된 후 호출되며, 다음 작업들을 수행합니다.
-          - 후처리 비용 계산
-          - 해당 작업자를 해제(비어 있는 상태로 전환)
-          - 후처리 완료된 item을 Packaging 단계로 전달
-          - 대기열에 저장된 item이 있다면, 사용 가능한 작업자에게 할당
-          
+        후처리 작업(delay)이 완료된 후 호출되어 다음 작업들을 수행합니다.
+        
+        작업 내용:
+          1. 후처리 작업 결과를 DAILY_REPORTS에 기록합니다.
+          2. Cost.cal_cost()를 호출하여 후처리 비용을 계산합니다.
+          3. 해당 작업자를 사용 가능 상태로 해제합니다.
+          4. Item이 속한 Job의 후처리 완료 카운트를 1 증가시킵니다.
+          5. 만약 Job에 포함된 모든 Item이 후처리 완료되었으면,
+             Packaging 단계로 해당 Job 전체를 전달하고 이벤트 로그를 남깁니다.
+          6. Packaging 단계로 전달 (여기서는 assign_item() 메서드를 호출)합니다.
+          7. 대기열(queue)에 저장된 Item이 있다면, 사용 가능한 작업자에게 할당합니다.
+        
         매개변수:
-            worker_id: 작업을 수행한 작업자의 ID
-            item: 후처리 완료된 item 객체
-            start_time: 해당 item의 후처리 시작 시간
-            end_time: 해당 item의 후처리 완료 시간
+            worker_id: 후처리 작업을 수행한 작업자의 ID
+            item: 후처리 작업이 완료된 Item 객체
+            start_time: 해당 Item의 후처리 시작 시각
+            end_time: 해당 Item의 후처리 완료 시각
         """
+        # 후처리 완료 이벤트를 DAILY_REPORTS에 기록
         DAILY_REPORTS.append({
             'job_id': item.job_id,
             'item_id': item.item_id,
@@ -660,14 +686,26 @@ class Proc_PostProcessing:
         })
         # 후처리 비용 계산
         Cost.cal_cost(item, "Post Processing cost")
-        # 작업 완료 후 해당 작업자를 해제(비어 있는 상태로 전환)
+        # 해당 작업자를 사용 가능 상태로 전환 (busy 해제)
         self.workers[worker_id]["is_busy"] = False
-        # 후처리 완료된 item을 Packaging 단계로 전달
-        self.packaging.assign_item(item)
-        # 대기열에 있는 item이 있다면, 사용 가능한 작업자에게 할당
+
+        # Item이 속한 Job의 후처리 완료 카운트를 1 증가
+        item.job.completed_postprocessing += 1
+
+        # 만약 Job에 포함된 모든 Item이 후처리 완료되었다면,
+        # Packaging 단계로 해당 Job을 전달하는 이벤트 로그 기록
+        if item.job.completed_postprocessing == len(item.job.items):
+            self.daily_events.append(
+                f"All items in Job {item.job_id} completed post-processing. Sending Job to Packaging."
+            )
+
+        # Packaging 단계로 후처리 완료된 Job 전달 (여기서는 assign_item() 메서드를 사용)
+        self.packaging.seize(item.job)
+
+        # 대기열에 대기 중인 Item이 있다면, 사용 가능한 작업자를 찾아 할당
         if self.queue:
             next_item = self.queue.pop(0)
-            for wid, worker in self.workers.items():
+            for wid, worker in self.workers.items(): 
                 if not worker["is_busy"]:
                     self.workers[wid]["is_busy"] = True
                     self.env.process(self.delay(wid, next_item))
@@ -676,49 +714,86 @@ class Proc_PostProcessing:
 # Packaging 클래스: 포장 작업을 관리
 class Proc_Packaging:
     def __init__(self, env, packaging_cost, daily_events, satisfication):
-        self.env = env  # SimPy 환경 객체 
+        self.env = env  # SimPy 환경 객체
         self.daily_events = daily_events  # 일별 이벤트 로그 리스트
         self.unit_packaging_cost = packaging_cost
         # 포장 작업자를 관리하는 딕셔너리 (PACKAGING_MACHINE의 키 사용)
         self.workers = {worker_id: {"is_busy": False} for worker_id in PACKAGING_MACHINE.keys()}
-        self.queue = []  # 대기 중인 전문 job들을 저장할 큐
+        self.queue = []  # 대기 중인 전문 Job들을 저장할 큐
         self.satisfication = satisfication
 
-    def assign_job(self, job):
+    def seize(self, job):
         """
-        PostProcessing이 완료된 전문 job을 받아, 즉시 포장 작업을 할당하거나,
-        사용 가능한 작업자가 없으면 대기열에 추가합니다.
+        PostProcessing이 완료된 전문 Job을 받아 포장 작업을 할당합니다.
+        이때, 포장 시간(packaging_time)을 Job에 추가합니다.
+        
+        동작:
+          - Job에 packaging_time (예시: 1시간 고정)을 추가합니다.
+          - 사용 가능한 작업자가 있으면 즉시 delay 프로세스를 시작하고,
+            그렇지 않으면 대기열에 Job을 추가합니다.
+        
+        매개변수:
+            job: 포장할 Job 객체 (여러 Item을 포함)
         """
-        self.daily_events.append(
-            f"{int(self.env.now % 24)}:{int((self.env.now % 1)*60):02d} - Job {job.job_id} sent to Packaging."
-        )
+        # Job에 포장 시간 추가 (여기서는 고정 1시간으로 설정)
+        if not hasattr(job, "packaging_time") or job.packaging_time is None:
+            job.packaging_time = 1
+
         assigned = False
-        # 사용 가능한 작업자를 탐색
+        # 사용 가능한 포장 작업자 탐색
         for worker_id, worker in self.workers.items():
             if not worker["is_busy"]:
                 worker["is_busy"] = True
-                self.env.process(self.process_job(job, worker_id))
+                # 포장 프로세스(delay)를 시작 (job과 작업자 ID 전달)
+                self.env.process(self.delay(job, worker_id))
                 assigned = True
                 break
         if not assigned:
             self.queue.append(job)
 
-    def process_job(self, job, worker_id):
+    def delay(self, job, worker_id):
         """
-        전문 job 전체에 대해 포장 작업을 수행하는 프로세스.
-        예시에서는 포장 시간은 1 시간으로 고정되어 있으며,
-        포장 비용은 전문 job 내 모든 Item의 부피 총합에 따라 산정합니다.
+        전문 Job 전체에 대해 포장 작업을 수행하는 프로세스.
+        
+        동작:
+          - Job의 포장 시간(job.packaging_time)만큼 대기한 후 포장 작업을 완료합니다.
+          - 포장 시작/종료 시간을 기록한 후 release 메서드를 호출하여 후속 처리를 진행합니다.
+        
+        매개변수:
+            job: 포장할 Job 객체
+            worker_id: 포장 작업을 수행할 작업자의 ID
         """
         start_time = self.env.now
-        packaging_time = 1  # 포장 시간 (예시)
         self.daily_events.append(
             f"{int(self.env.now % 24)}:{int((self.env.now % 1)*60):02d} - Job {job.job_id} starts Packaging on Worker {worker_id}."
         )
-        yield self.env.timeout(packaging_time)
+        # Job의 포장 시간만큼 대기 (포장 작업 진행)
+        yield self.env.timeout(job.packaging_time)
         end_time = self.env.now
         self.daily_events.append(
             f"{int(end_time % 24)}:{int((end_time % 1)*60):02d} - Job {job.job_id} finished Packaging on Worker {worker_id}."
         )
+        # 포장 완료 후 후속 처리를 release 메서드를 통해 진행
+        self.release(job, worker_id, start_time, end_time)
+
+    def release(self, job, worker_id, start_time, end_time):
+        """
+        release 메서드
+        -------------------
+        포장 작업이 완료된 후 호출되어 다음 작업들을 수행합니다.
+        
+        작업 내용:
+          - 포장 완료 이벤트를 DAILY_REPORTS에 기록합니다.
+          - 포장 비용 계산 및 비용 보고서 업데이트
+          - 포장 완료 후 만족도 관련 처리 (필요시 구현)
+          - 사용한 작업자(worker)를 해제하고, 대기열에 있는 Job이 있다면 해당 작업자로 포장 작업을 재할당합니다.
+        
+        매개변수:
+            job: 포장 작업이 완료된 Job 객체
+            worker_id: 포장 작업을 수행한 작업자의 ID
+            start_time: 포장 작업 시작 시각
+            end_time: 포장 작업 완료 시각
+        """
         DAILY_REPORTS.append({
             'job_id': job.job_id,
             'worker_id': worker_id,
@@ -738,13 +813,16 @@ class Proc_Packaging:
             # 포장 완료 후 만족도 관련 추가 처리 (필요시 구현)
             pass
 
-        # 포장 작업자 해제 후, 대기열에 있는 전문 job 처리
+        # 포장 작업자 해제
         self.workers[worker_id]["is_busy"] = False
+        # 대기열에 있는 Job이 있다면, 해당 작업자에게 Job 할당
         if self.queue:
             next_job = self.queue.pop(0)
-            self.workers[worker_id]["is_busy"] = True
-            self.env.process(self.process_job(next_job, worker_id))
-
+            for wid, worker in self.workers.items():
+                if not worker["is_busy"]:
+                    self.workers[worker_id]["is_busy"] = True
+                    self.env.process(self.delay(next_job, wid))
+                    break
 
 # Job 클래스: Job의 속성을 정의
 class Item:
@@ -849,7 +927,7 @@ def create_env(daily_events):
     
     # Printer 생성 시 order_store와 washing_machine (즉, Washing.assign_order 호출) 전달
     printers = [
-        Proc_Printer(simpy_env, COST_TYPES[0]['PRINTING_COST'], daily_events, pid, washing_machine, printer_store, washing_store)
+        Proc_Build(simpy_env, COST_TYPES[0]['PRINTING_COST'], daily_events, pid, washing_machine, printer_store, washing_store)
         for pid in PRINTERS.keys()
     ]
 
@@ -857,15 +935,17 @@ def create_env(daily_events):
 
 
 # SimPy 이벤트 프로세스를 설정하는 함수 (simpy_event_processes)
-def simpy_event_processes(simpy_env, packaging, post_processor, customer, display, printers, daily_events):
+def simpy_event_processes(simpy_env, packaging, post_processor, customer, display, printers, washing_machine, dry_machine, daily_events):
     """
     시뮬레이션의 주요 프로세스를 스케줄링합니다.
     
     - display.track_days(): 매일의 보고서를 기록합니다.
-    - customer.create_orders_continuously(): 지속적으로 주문(Order)을 생성합니다.
-    - 각 Printer의 process_orders(): order_store에 들어온 주문을 인쇄(Printing) 처리합니다.
+    - customer.create_jobs_continuously(): 지속적으로 주문(Order)을 생성합니다.
+    - 각 Printer의 seize(): printer_store에 들어온 주문을 인쇄(Printing) 처리합니다.
+    - washing_machine.seize(): washing_store에 전달된 주문을 세척 작업으로 처리합니다.
+    - dry_machine.seize(): drying_store에 전달된 주문을 건조 작업으로 처리합니다.
     
-    Drying 단계에서 PostProcessing, 그리고 PostProcessing에서 Packaging으로 order가 자동 전달됩니다.
+    Drying 단계에서 PostProcessing, 그리고 PostProcessing에서 Packaging으로 주문이 자동 전달됩니다.
     """
     # 날짜 추적 프로세스 실행 (매일 보고서 기록)
     simpy_env.process(display.track_days())
@@ -876,3 +956,9 @@ def simpy_event_processes(simpy_env, packaging, post_processor, customer, displa
     # 각 Printer의 주문 처리 프로세스 실행
     for printer in printers:
         simpy_env.process(printer.seize())
+
+    # Washing 프로세스 실행 (세척 단계)
+    simpy_env.process(washing_machine.seize())
+    
+    # Drying 프로세스 실행 (건조 단계)
+    simpy_env.process(dry_machine.seize())
