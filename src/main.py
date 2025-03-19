@@ -7,7 +7,7 @@ import visualization
 # Step 1: 환경 및 객체 초기화
 # 수정된 create_env는 아래 순서대로 반환합니다.
 # (simpy_env, packaging, dry_machine, washing_machine, post_processor, customer, display, printers, daily_events, satisfication)
-(simpy_env, packaging, dry_machine, washing_machine, post_processor, 
+(simpy_env, printer_store, washing_store, drying_store, packaging, dry_machine, washing_machine, post_processor, 
  customer, display, printers, daily_events, satisfication) = env.create_env(DAILY_EVENTS)
 
 # Step 2: SimPy 이벤트 프로세스 설정
@@ -26,22 +26,36 @@ for day in range(SIM_TIME):
         print(f"\n===== Daily Cost Report for Day {day + 1} =====")
         for cost_type, cost_value in DAILY_COST_REPORT.items():
             print(f"{cost_type}: ${cost_value:.2f}")
-    print(f"\n===== JOB LOG for Day {day + 1} =====")
-    for job in ITEM_LOG:
-        if job['day'] == day + 1:
-            print(f"Item {job['job_id']}-{job['item_id']} | Width: {job['width']} x Height: {job['height']} x Depth: {job['depth']} = Volume: {job['volume']:.2f} | "
-                  f"Creation Time: {job['create_time']:.4f} | "
-                  f"Build Time: {job['build_time']} | Post-Processing Time: {job['post_processing_time']}")
+    print(f"\n===== ITEM LOG for Day {day + 1} =====")
+    for item in ITEM_LOG:
+        if item['day'] == day + 1:
+            print(f"Item {item['job_id']}-{item['item_id']} | Width: {item['width']} x Height: {item['height']} x Depth: {item['depth']} = Volume: {item['volume']:.2f} | "
+                  f"Creation Time: {item['create_time']:.4f} | "
+                  f"Build Time: {item['build_time']} | Post-Processing Time: {item['post_processing_time']}")
     if PRINT_SATISFICATION:
         print(f"\n===== Total Satisfication for Day {day + 1}: {satisfication.total_satisfication:.4f} =====\n")
 
     daily_events.clear()
     env.Cost.clear_cost()
 
-# 추가 작업 처리: 아직 처리 중인 주문이나 대기열이 있다면 (예: Customer의 order_store, Washing의 common_queue, Packaging의 queue, Packaging 작업자)
+# 추가 작업 처리: 아직 처리 중인 주문이나 대기열이 있다면 (예: Customer의 temp_item_list, printer_store, Washing의 washing_store, waiting_queue, Drying의 drying_store, waiting_queue, Packaging의 queue)
 day = SIM_TIME + 1
-while (customer.job_store.items or washing_machine.common_queue or packaging.queue or 
-       any(worker["is_busy"] for worker in packaging.workers.values())):
+while (
+    customer.temp_job_list or 
+    printer_store.items or
+    any(printer.is_busy for printer in printers) or 
+    washing_store.items or 
+    drying_store.items or 
+    washing_machine.waiting_queue or 
+    any(len(machine["batch"]) > 0 for machine in washing_machine.machines.values()) or
+    dry_machine.waiting_queue or 
+    any(len(machine["batch"]) > 0 for machine in dry_machine.machines.values()) or
+    post_processor.queue or 
+    any(worker["is_busy"] for worker in post_processor.workers.values()) or
+    packaging.queue or 
+    any(worker["is_busy"] for worker in packaging.workers.values())
+):
+
     simpy_env.run(until=simpy_env.now + 24)
 
     if PRINT_SIM_EVENTS:
@@ -52,11 +66,7 @@ while (customer.job_store.items or washing_machine.common_queue or packaging.que
         print(f"\n===== Additional Cost Report for Day {day} =====")
         for cost_type, cost_value in DAILY_COST_REPORT.items():
             print(f"{cost_type}: ${cost_value:.2f}")
-    print(f"\n===== ITEM LOG for Additional Day {day} =====")
-    for job in ITEM_LOG:
-        if job['day'] == day:
-            print(f"Job {job['job_id']} | Volume: {job['volume']:.2f} | "
-                  f"Build Time: {job['build_time']} | Post-Processing Time: {job['post_processing_time']}")
+
     if PRINT_SATISFICATION:
         print(f"\n===== Total Satisfication for Day {day}: {satisfication.total_satisfication:.4f} =====\n")
 
@@ -64,12 +74,12 @@ while (customer.job_store.items or washing_machine.common_queue or packaging.que
     env.Cost.clear_cost()
     day += 1
 
-# 시뮬레이션 종료 후 전체 JOB_LOG 출력
+# 시뮬레이션 종료 후 전체 item_LOG 출력
 print("\n============= Final ITEM LOG =============")
-for job in ITEM_LOG:
-    print(f"Day {job['day']} | Item {job['job_id']}-{job['item_id']} | Volume: {job['volume']:.2f} | "
-          f"Build Time: {job['build_time']} | Post-Processing Time: {job['post_processing_time']}")
-
+for item in ITEM_LOG:
+    print(f"Day {item['day']} | Item {item['job_id']}-{item['item_id']} | Volume: {item['volume']:.2f} | "
+          f"Build Time: {item['build_time']} | Post-Processing Time: {item['post_processing_time']}")
+"""
 # DAILY_REPORTS 데이터를 DataFrame으로 변환 및 CSV 파일로 저장
 print(DAILY_REPORTS)
 export_Daily_Report = []
@@ -77,7 +87,7 @@ for record in DAILY_REPORTS:
     if record['process'] == 'Printing':
         export_Daily_Report.append({
             "DAY": int(record['start_time'] // 24) + 1,
-            "JOB_ID": record['job_id'],
+            "item_ID": record['item_id'],
             "ASSIGNED_PRINTER": record.get('printer_id', None),
             "PRINTING_START": record['start_time'],
             "PRINTING_FINISH": record['end_time'],
@@ -90,13 +100,13 @@ for record in DAILY_REPORTS:
         })
     elif record['process'] == 'Post-Processing':
         for item in export_Daily_Report:
-            if item['JOB_ID'] == record['job_id']:
+            if item['item_ID'] == record['item_id']:
                 item["ASSIGNED_POSTPROCESS_WORKER"] = record.get('worker_id', None)
                 item["POSTPROCESSING_START"] = record['start_time']
                 item["POSTPROCESSING_FINISH"] = record['end_time']
     elif record['process'] == 'Packaging':
         for item in export_Daily_Report:
-            if item['JOB_ID'] == record['job_id']:
+            if item['item_ID'] == record['item_id']:
                 item["ASSIGNED_PACKAGING_WORKER"] = record.get('worker_id', None)
                 item["PACKAGING_START"] = record['start_time']
                 item["PACKAGING_FINISH"] = record['end_time']
@@ -106,3 +116,4 @@ daily_reports.to_csv("./Daily_Report.csv", index=False)
 
 if VISUALIZATION != False:
     visualization.visualization(export_Daily_Report)
+"""

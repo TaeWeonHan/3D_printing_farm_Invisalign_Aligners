@@ -159,6 +159,9 @@ class Customer:
                     'build_time': item.build_time,
                     'post_processing_time': item.post_processing_time,
                 })
+                
+                # ITEM 객체에 자신의 로그 인덱스 저장
+                item.log_index = len(ITEM_LOG) - 1
 
                 # 생성된 Item이 프린터 크기 조건에 부합하면 Job에 추가, 아니면 부족 처리
                 if (item.width <= PRINTERS_SIZE["WIDTH"] and
@@ -235,19 +238,27 @@ class Proc_Build:
                 else:
                     item.build_time = 1
                     total_build_time += item.build_time
+                    
+                # 저장해둔 log_index를 사용하여 ITEM_LOG 업데이트 (O(1) 접근)
+                if hasattr(item, 'log_index'):
+                    ITEM_LOG[item.log_index]['build_time'] = item.build_time
 
             # 계산된 총 build_time을 job의 속성으로 할당합니다.
             job.job_build_time = total_build_time
-                        
+            
+            
+            self.is_busy = True  # 주문 처리 시작
+              
             yield self.env.process(self.delay(job))
+             
 
     def delay(self, job):
         """
         한 주문(Job)을 처리하는 프로세스.
         주문 내 모든 Job의 build_time 합산값(order_build_time)만큼 대기하며 인쇄 작업을 모사.
         """
-        self.is_busy = True  # 주문 처리 시작
-        
+
+        """
         # Set-up 단계
         set_up_start = self.env.now
         self.daily_events.append(
@@ -255,7 +266,7 @@ class Proc_Build:
         )
         yield self.env.timeout(1)
         set_up_end = self.env.now
-        
+        """
         # Build 단계 (계산된 build_time 만큼 대기)
         start_time = self.env.now
         self.daily_events.append(
@@ -263,7 +274,7 @@ class Proc_Build:
         )
         yield self.env.timeout(job.job_build_time)
         end_time = self.env.now
-        
+        """
         # Closing 단계
         closing_start = self.env.now
         self.daily_events.append(
@@ -271,10 +282,11 @@ class Proc_Build:
         )
         yield self.env.timeout(1)
         closing_end = self.env.now
-
+        """
         if PRINT_SIM_COST:
             Cost.cal_cost(job, "Printing cost")
 
+        """
         DAILY_REPORTS.append({
             'order_id': job.job_id,  # job_id로 표기
             'printer_id': self.printer_id,
@@ -284,6 +296,14 @@ class Proc_Build:
             'end_time': end_time,
             'closing_start': closing_start,
             'closing_end': closing_end,
+            'process': 'Printing'
+        })
+        """
+        DAILY_REPORTS.append({
+            'order_id': job.job_id,  # job_id로 표기
+            'printer_id': self.printer_id,
+            'start_time': start_time,
+            'end_time': end_time,
             'process': 'Printing'
         })
 
@@ -306,7 +326,7 @@ class Proc_Washing:
     - washing_store에 넣은 job들을 seize 프로세스에서 각 워싱 머신의 capacity(용량)만큼 꺼내어 배치(batch)를 구성.
     - 배치가 완성되면 delay 프로세스를 통해 한 번에 세척 작업을 진행하고, 세척 완료 후 Drying 단계로 job들을 전달.
     """
-    def __init__(self, env, washing_cost, daily_events, dry_machine, washing_store, drying_store):
+    def __init__(self, env, washing_cost, daily_events, dry_machine, washing_store, drying_store, batch_timeout=BATCH_TIMEOUT):
         """
         생성자 (__init__)
         :env: SimPy 환경 객체로, 시뮬레이션의 시간 흐름과 이벤트 스케줄링을 관리합니다.
@@ -328,6 +348,7 @@ class Proc_Washing:
         self.dry_machine = dry_machine                # 건조 단계 객체
         self.washing_store = washing_store            # job을 저장하는 washing Store
         self.drying_store = drying_store              # job을 저장하는 drying Store
+        self.batch_timeout = batch_timeout
         # 각 워싱 머신의 용량 정보를 WASHING_MACHINE 설정에서 추출
         # 예를 들어, WASHING_MACHINE = { 0: {"WASHING_SIZE": 2}, 1: {"WASHING_SIZE": 2} }
         self.machines = {
@@ -352,26 +373,56 @@ class Proc_Washing:
             job = yield self.washing_store.get()
             assigned = False
 
+            # 먼저, 이미 배치가 진행 중인 머신에 할당 시도
             for machine_id, machine in self.machines.items():
-                if not machine["is_busy"] and len(machine["batch"]) < machine["capacity"]:
+                if not machine["is_busy"] and 0 < len(machine["batch"]) < machine["capacity"]:
                     machine["batch"].append(job)
                     self.daily_events.append(
                         f"{int(self.env.now % 24)}:{int((self.env.now % 1)*60):02d} - Job {job.job_id} assigned to Washing Machine {machine_id}. Batch: {[j.job_id for j in machine['batch']]}"
                     )
                     assigned = True
-                    # 배치가 머신의 capacity에 도달하면 바로 배치 처리를 시작합니다.
+                    # 배치가 꽉 찼으면 바로 처리
                     if len(machine["batch"]) == machine["capacity"]:
                         machine["is_busy"] = True
                         current_batch = machine["batch"]
-                        machine["batch"] = []  # 배치 초기화
+                        machine["batch"] = []
+                        machine["batch_start_time"] = None
                         self.env.process(self.delay(machine_id, current_batch))
                     break
 
+            # 빈 배치인 머신에 할당
+            if not assigned:
+                for machine_id, machine in self.machines.items():
+                    if not machine["is_busy"] and len(machine["batch"]) == 0:
+                        machine["batch"].append(job)
+                        machine["batch_start_time"] = self.env.now
+                        self.daily_events.append(
+                            f"{int(self.env.now % 24)}:{int((self.env.now % 1)*60):02d} - Job {job.job_id} started new batch on Washing Machine {machine_id}."
+                        )
+                        # 타임아웃 체크 프로세스 시작 (한 번만 시작)
+                        self.env.process(self.check_batch_timeout(machine_id))
+                        assigned = True
+                        break
+            # 할당되지 않으면 대기열에 넣음
             if not assigned:
                 self.waiting_queue.append(job)
                 self.daily_events.append(
                     f"{int(self.env.now % 24)}:{int((self.env.now % 1)*60):02d} - All Washing Machines busy/full. Job {job.job_id} added to waiting queue."
                 )
+    
+    def check_batch_timeout(self, machine_id):
+        """배치 시작 후 batch_timeout 시간이 지나면, 배치가 꽉 차지 않더라도 강제로 처리"""
+        yield self.env.timeout(self.batch_timeout)
+        machine = self.machines[machine_id]
+        if not machine["is_busy"] and machine["batch"]:
+            self.daily_events.append(
+                f"{int(self.env.now % 24)}:{int((self.env.now % 1)*60):02d} - Timeout reached on Washing Machine {machine_id}. Processing batch: {[j.job_id for j in machine['batch']]}"
+            )
+            machine["is_busy"] = True
+            current_batch = machine["batch"]
+            machine["batch"] = []
+            machine["batch_start_time"] = None
+            self.env.process(self.delay(machine_id, current_batch))
 
     def delay(self, machine_id, jobs_batch):
         """
@@ -406,25 +457,33 @@ class Proc_Washing:
         """
         # 해당 머신을 free 상태로 전환
         self.machines[machine_id]["is_busy"] = False
-        
+
         # 세척 완료된 job들을 건조 단계로 전달
         for job in jobs_batch:
             self.drying_store.put(job)
-        
+
         # 머신이 free이고 배치에 여유가 있을 때, waiting_queue에서 job을 가져와 배치에 추가
-        while self.waiting_queue and (not self.machines[machine_id]["is_busy"]) and (len(self.machines[machine_id]["batch"]) < self.machines[machine_id]["capacity"]):
+        while (self.waiting_queue and
+            (not self.machines[machine_id]["is_busy"]) and
+            (len(self.machines[machine_id]["batch"]) < self.machines[machine_id]["capacity"])):
             waiting_job = self.waiting_queue.pop(0)
             self.machines[machine_id]["batch"].append(waiting_job)
             self.daily_events.append(
                 f"{int(self.env.now % 24)}:{int((self.env.now % 1)*60):02d} - After processing, waiting Job {waiting_job.job_id} assigned to Washing Machine {machine_id}. Batch: {[j.job_id for j in self.machines[machine_id]['batch']]}"
             )
-        # 만약 재할당한 배치가 capacity에 도달하고 머신이 free 상태라면 delay()를 실행하여 배치 처리
+            # 만약 이 배치가 새로 시작되었거나 batch_start_time이 설정되지 않았다면 타이머 시작
+            if self.machines[machine_id].get("batch_start_time") is None:
+                self.machines[machine_id]["batch_start_time"] = self.env.now
+                self.env.process(self.check_batch_timeout(machine_id))
+        
+        # 배치가 capacity에 도달하면 바로 처리
         if (not self.machines[machine_id]["is_busy"]) and (len(self.machines[machine_id]["batch"]) == self.machines[machine_id]["capacity"]):
             self.machines[machine_id]["is_busy"] = True
             current_batch = self.machines[machine_id]["batch"]
             self.machines[machine_id]["batch"] = []
+            # 배치 시작 시간 초기화 후 즉시 처리
+            self.machines[machine_id]["batch_start_time"] = None
             self.env.process(self.delay(machine_id, current_batch))
-
 
 # Drying Process 클래스: 건조 작업을 관리
 class Proc_Drying:
@@ -434,7 +493,7 @@ class Proc_Drying:
     - 배치가 완성되면 delay() 메서드를 통해 한 번에 건조 작업을 진행하고,
       건조 완료 후 release()를 통해 각 job을 후속 단계(PostProcessing)로 전달하며, waiting_queue의 job들을 재할당합니다.
     """
-    def __init__(self, env, drying_cost, daily_events, post_processor, drying_store):
+    def __init__(self, env, drying_cost, daily_events, post_processor, drying_store, batch_timeout=BATCH_TIMEOUT):
         """
         생성자 (__init__)
         :env: SimPy 환경 객체로, 시뮬레이션의 시간 흐름과 이벤트 스케줄링을 관리합니다.
@@ -454,6 +513,7 @@ class Proc_Drying:
         self.unit_drying_cost = drying_cost           # 건조 비용 단위
         self.post_processor = post_processor           # 후처리(PostProcessing) 객체
         self.drying_store = drying_store               # 건조 작업을 위한 입력 버퍼 역할 Store
+        self.batch_timeout = batch_timeout
         
         # DRY_MACHINE 전역 설정을 참조하여 각 건조 머신의 capacity, batch, busy 상태를 관리하는 딕셔너리 생성
         # 예: DRY_MACHINE = { 0: {"DRYING_SIZE": 3}, 1: {"DRYING_SIZE": 3} }
@@ -479,26 +539,56 @@ class Proc_Drying:
             job = yield self.drying_store.get()
             assigned = False
 
+            # 먼저, 이미 배치가 진행 중인 머신에 할당 시도
             for machine_id, machine in self.machines.items():
-                if not machine["is_busy"] and len(machine["batch"]) < machine["capacity"]:
+                if not machine["is_busy"] and 0 < len(machine["batch"]) < machine["capacity"]:
                     machine["batch"].append(job)
                     self.daily_events.append(
                         f"{int(self.env.now % 24)}:{int((self.env.now % 1)*60):02d} - Job {job.job_id} assigned to Drying Machine {machine_id}. Batch: {[j.job_id for j in machine['batch']]}"
                     )
                     assigned = True
-                    # 배치가 머신의 capacity에 도달하면 바로 배치 처리를 시작합니다.
+                    # 배치가 꽉 찼으면 바로 처리
                     if len(machine["batch"]) == machine["capacity"]:
                         machine["is_busy"] = True
                         current_batch = machine["batch"]
-                        machine["batch"] = []  # 배치 초기화
+                        machine["batch"] = []
+                        machine["batch_start_time"] = None
                         self.env.process(self.delay(machine_id, current_batch))
                     break
 
+            # 빈 배치인 머신에 할당
+            if not assigned:
+                for machine_id, machine in self.machines.items():
+                    if not machine["is_busy"] and len(machine["batch"]) == 0:
+                        machine["batch"].append(job)
+                        machine["batch_start_time"] = self.env.now
+                        self.daily_events.append(
+                            f"{int(self.env.now % 24)}:{int((self.env.now % 1)*60):02d} - Job {job.job_id} started new batch on Drying Machine {machine_id}."
+                        )
+                        # 타임아웃 체크 프로세스 시작 (한 번만 시작)
+                        self.env.process(self.check_batch_timeout(machine_id))
+                        assigned = True
+                        break
+            # 할당되지 않으면 대기열에 넣음
             if not assigned:
                 self.waiting_queue.append(job)
                 self.daily_events.append(
                     f"{int(self.env.now % 24)}:{int((self.env.now % 1)*60):02d} - All Drying Machines busy/full. Job {job.job_id} added to waiting queue."
                 )
+    
+    def check_batch_timeout(self, machine_id):
+        """배치 시작 후 batch_timeout 시간이 지나면, 배치가 꽉 차지 않더라도 강제로 처리"""
+        yield self.env.timeout(self.batch_timeout)
+        machine = self.machines[machine_id]
+        if not machine["is_busy"] and machine["batch"]:
+            self.daily_events.append(
+                f"{int(self.env.now % 24)}:{int((self.env.now % 1)*60):02d} - Timeout reached on Drying Machine {machine_id}. Processing batch: {[j.job_id for j in machine['batch']]}"
+            )
+            machine["is_busy"] = True
+            current_batch = machine["batch"]
+            machine["batch"] = []
+            machine["batch_start_time"] = None
+            self.env.process(self.delay(machine_id, current_batch))
 
     def delay(self, machine_id, jobs_batch):
         """
@@ -530,30 +620,36 @@ class Proc_Drying:
         - 이후, 머신이 free인 경우 waiting_queue에 있는 job들을 해당 머신의 배치에 재할당하고,
           만약 재할당 후 배치가 capacity에 도달하면, 새로운 delay() 프로세스를 실행하여 해당 배치를 처리합니다.
         """
-        # 해당 머신을 free 상태로 전환하고 배치를 초기화합니다.
+        # 해당 머신을 free 상태로 전환
         self.machines[machine_id]["is_busy"] = False
-        self.machines[machine_id]["batch"] = []
-        
-        # 건조 완료된 job들을 후처리 단계로 전달합니다.
+
+        # 세척 완료된 job들을 건조 단계로 전달
         for job in jobs_batch:
             self.post_processor.seize(job)
-        
-        # 머신이 free인 경우, waiting_queue에서 job들을 가져와 배치에 추가합니다.
-        while (self.waiting_queue and 
-               (not self.machines[machine_id]["is_busy"]) and 
-               (len(self.machines[machine_id]["batch"]) < self.machines[machine_id]["capacity"])):
+
+        # 머신이 free이고 배치에 여유가 있을 때, waiting_queue에서 job을 가져와 배치에 추가
+        while (self.waiting_queue and
+            (not self.machines[machine_id]["is_busy"]) and
+            (len(self.machines[machine_id]["batch"]) < self.machines[machine_id]["capacity"])):
             waiting_job = self.waiting_queue.pop(0)
             self.machines[machine_id]["batch"].append(waiting_job)
             self.daily_events.append(
                 f"{int(self.env.now % 24)}:{int((self.env.now % 1)*60):02d} - After processing, waiting Job {waiting_job.job_id} assigned to Drying Machine {machine_id}. Batch: {[j.job_id for j in self.machines[machine_id]['batch']]}"
             )
-        # 만약 재할당한 배치가 capacity에 도달하고 머신이 free 상태라면 delay()를 실행하여 배치 처리
+            # 만약 이 배치가 새로 시작되었거나 batch_start_time이 설정되지 않았다면 타이머 시작
+            if self.machines[machine_id].get("batch_start_time") is None:
+                self.machines[machine_id]["batch_start_time"] = self.env.now
+                self.env.process(self.check_batch_timeout(machine_id))
+        
+        # 배치가 capacity에 도달하면 바로 처리
         if (not self.machines[machine_id]["is_busy"]) and (len(self.machines[machine_id]["batch"]) == self.machines[machine_id]["capacity"]):
             self.machines[machine_id]["is_busy"] = True
             current_batch = self.machines[machine_id]["batch"]
             self.machines[machine_id]["batch"] = []
+            # 배치 시작 시간 초기화 후 즉시 처리
+            self.machines[machine_id]["batch_start_time"] = None
             self.env.process(self.delay(machine_id, current_batch))
-            
+
 # PostProcessing 클래스: 후처리 작업을 관리
 class Proc_PostProcessing:
     """
@@ -643,6 +739,10 @@ class Proc_PostProcessing:
         # Item에 후처리 시간이 없으면 기본값 1 할당
         if not hasattr(item, "post_processing_time") or item.post_processing_time is None:
             item.post_processing_time = 1
+            
+        if hasattr(item, 'log_index'):
+            ITEM_LOG[item.log_index]['post_processing_time'] = item.post_processing_time
+        
         # 후처리 시간만큼 SimPy 환경에서 대기
         yield self.env.timeout(item.post_processing_time)
         # 후처리 완료 시각 기록
@@ -699,8 +799,8 @@ class Proc_PostProcessing:
                 f"All items in Job {item.job_id} completed post-processing. Sending Job to Packaging."
             )
 
-        # Packaging 단계로 후처리 완료된 Job 전달 (여기서는 assign_item() 메서드를 사용)
-        self.packaging.seize(item.job)
+            # Packaging 단계로 후처리 완료된 Job 전달 (여기서는 assign_item() 메서드를 사용)
+            self.packaging.seize(item.job)
 
         # 대기열에 대기 중인 Item이 있다면, 사용 가능한 작업자를 찾아 할당
         if self.queue:
@@ -920,8 +1020,8 @@ def create_env(daily_events):
     satisfication = Satisfication(simpy_env, daily_events)
     packaging = Proc_Packaging(simpy_env, COST_TYPES[0]['PACKAGING_COST'], daily_events, satisfication)
     post_processor = Proc_PostProcessing(simpy_env, COST_TYPES[0]['POSTPROCESSING_COST'], daily_events, packaging)
-    dry_machine = Proc_Drying(simpy_env, COST_TYPES[0]['DRYING_COST'], daily_events, post_processor, drying_store)
-    washing_machine = Proc_Washing(simpy_env, COST_TYPES[0]['WASHING_COST'], daily_events, dry_machine, washing_store, drying_store)
+    dry_machine = Proc_Drying(simpy_env, COST_TYPES[0]['DRYING_COST'], daily_events, post_processor, drying_store, batch_timeout=BATCH_TIMEOUT)
+    washing_machine = Proc_Washing(simpy_env, COST_TYPES[0]['WASHING_COST'], daily_events, dry_machine, washing_store, drying_store, batch_timeout=BATCH_TIMEOUT)
     customer = Customer(simpy_env, COST_TYPES[0]['SHORTAGE_COST'], daily_events, satisfication, printer_store)
     display = Display(simpy_env, daily_events)
     
@@ -931,7 +1031,7 @@ def create_env(daily_events):
         for pid in PRINTERS.keys()
     ]
 
-    return simpy_env, packaging, dry_machine, washing_machine, post_processor, customer, display, printers, daily_events, satisfication
+    return simpy_env, printer_store, washing_store, drying_store, packaging, dry_machine, washing_machine, post_processor, customer, display, printers, daily_events, satisfication
 
 
 # SimPy 이벤트 프로세스를 설정하는 함수 (simpy_event_processes)
@@ -959,6 +1059,6 @@ def simpy_event_processes(simpy_env, packaging, post_processor, customer, displa
 
     # Washing 프로세스 실행 (세척 단계)
     simpy_env.process(washing_machine.seize())
-    
+
     # Drying 프로세스 실행 (건조 단계)
     simpy_env.process(dry_machine.seize())

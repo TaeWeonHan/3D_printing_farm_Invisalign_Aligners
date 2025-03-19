@@ -117,9 +117,11 @@ PRINTERS = {
 # unit: mm
 PRINTERS_SIZE = {"VOL": 669130000, "WIDTH": 1540, "HEIGHT": 790, "DEPTH": 550, "SET_UP": 10, "CLOSING": 30}
 
+BATCH_TIMEOUT = 1
+
 WASHING_MACHINE = {
-    0: {"ID": 0, "WASHING_SIZE": 2},
-    1: {"ID": 1, "WASHING_SIZE": 2}
+    0: {"ID": 0, "WASHING_SIZE": 3},
+    1: {"ID": 1, "WASHING_SIZE": 3}
 }
 
 DRY_MACHINE = {
