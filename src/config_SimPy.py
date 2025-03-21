@@ -4,7 +4,7 @@ import random
 """ Simulation settings """
 
 # Simulation time settings
-SIM_TIME = 7 * 24 * 60  # (unit: minutes)
+SIM_TIME = 7 * 24 * 60 * 2  # (unit: minutes)
 
 # Logging and visualization settings
 EVENT_LOGGING = True  # Event logging enable/disable flag
@@ -22,9 +22,9 @@ SHOW_GANTT_DEBUG = False  # 기본값은 False로 설정
 PALLET_SIZE_LIMIT = 50
 
 # Process time settings (in minutes)
-PROC_TIME_BUILD = 180  # Process time for build (unit: minutes)
-PROC_TIME_WASH = 120  # Process time for wash (unit: minutes)
-PROC_TIME_DRY = 120  # Process time for dry (unit: minutes)
+PROC_TIME_BUILD = 60  # Process time for build (unit: minutes)
+PROC_TIME_WASH = 60  # Process time for wash (unit: minutes)
+PROC_TIME_DRY = 60  # Process time for dry (unit: minutes)
 PROC_TIME_INSPECT = 30  # Process time for inspect per item (unit: minutes)
 
 # Machine settings
@@ -57,16 +57,16 @@ POLICY_ORDER_TO_JOB = "MAX_PER_JOB"
 
 
 def NUM_PATIENTS_PER_ORDER(): return random.randint(
-    5, 5)
+    2, 2)
 
 # Number of items per patient
 
 
 def NUM_ITEMS_PER_PATIENT(): return random.randint(
-    50, 70)
+    5, 5)
 
 
 # Customer settings
-CUST_ORDER_CYCLE = 7 * 24 * 60  # Customer order cycle (1 week in minutes)
+CUST_ORDER_CYCLE = 24 * 60  # Customer order cycle (1 week in minutes)
 # Order settings
 ORDER_DUE_DATE = 7 * 24 * 60  # Order due date (1 week in minutes)
