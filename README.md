@@ -40,6 +40,7 @@ sequenceDiagram
 ```
 ## Problem Description
 ![Image](https://github.com/user-attachments/assets/903d572e-80ad-4a1c-b73f-1909d570003c)
+![Image](https://github.com/user-attachments/assets/ae8cf6ec-f4a5-45da-947f-61dbb3075db5)
 1. The customer sends an order to the manager that includes patients and the items associated with each patient.
 
 2. The manager converts the order into jobs and forwards those jobs to the 3D printing foundry.
@@ -48,8 +49,22 @@ sequenceDiagram
 
 4. If the number of defective items exceeds a certain threshold, the foundry sends the defective item information to the manager, who then creates a rework job for those defective items.
 
+5. The results of the simulation can be confirmed through the Gant chart and terminal results.
+
 ## Requirements
 In the simulator, we utilized simpy library.
+
+## Simulator Process Description
+Each process is executed in the following sequence: seize, delay, and release.
+
+* Seize stage:
+Jobs stored in the job_store are assigned to the available processors.
+
+* Delay stage:
+The actual processing takes place, where the available processors are utilized to process the jobs. Once processed, the jobs are forwarded to the next process, moving them to the release stage.
+
+* Release stage:
+The processors that have completed processing are marked as available again, allowing them to handle new jobs.
 
 ## Configuration setting
 If you want to change the settings of the simulation, you can change the settings through the config_SimPy.py.
