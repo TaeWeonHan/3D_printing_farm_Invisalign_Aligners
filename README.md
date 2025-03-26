@@ -38,57 +38,21 @@ sequenceDiagram
         end
     end
 ```
-<!-- 
-############## AMR을 고려한 경우 ################# 
-```mermaid
-sequenceDiagram
-    participant PS as Pallet Storage
-    participant RW as Resin Worker
-    participant IW as Inspection Workers
-    participant A1 as AMR1 (Pallet Storage ↔ Build)
-    participant A2 as AMR2 (Build ↔ Washing)
-    participant A3 as AMR3 (Washing ↔ Drying)
-    participant A4 as AMR4 (Drying ↔ Support)
-    participant P as 3D Printers
-    participant WM as Washing Machines
-    participant DM as Drying Machines
-    participant B as Box
-    participant S as System
+## Problem Description
+![Image](https://github.com/user-attachments/assets/903d572e-80ad-4a1c-b73f-1909d570003c)
+1. The customer sends an order to the manager that includes patients and the items associated with each patient.
 
-    %% Process 1: Build Process
-    autonumber
-    A1->>PS: Picks up empty pallet from Pallet Storage
-    A1->>P: Places pallet into 3D Printers (Setup)
-    RW->>P: Fills liquid resin into 3D Printers (Setup)
-    P-->>P: Builds the object (Build)
-    P-->>P: Pallet Lifting (Closing)
-    P-->>P: Waits for resin to drip off surface (Closing)
+2. The manager converts the order into jobs and forwards those jobs to the 3D printing foundry.
 
-    %% Process 2: Washing Process
-    A2->>P: Removes pallet with build part from 3D Printers
-    A2->>WM: Places pallet into Washing Machines (Setup)
-    WM-->>WM: Performs washing
+3. The 3D printing foundry processes the jobs in the following sequence: build, washing, drying, and inspection. During the build stage, defects may occur, which are detected during the inspection stage.
 
-    %% Process 3: Air-drying Process
-    A3->>WM: Removes pallet from Washing Machines
-    A3->>DM: Places pallet into Drying Machines (Setup)
-    DM-->>DM: Performs air-drying
+4. If the number of defective items exceeds a certain threshold, the foundry sends the defective item information to the manager, who then creates a rework job for those defective items.
 
-    %% Process 4: Support Removal Process
-    A4->>DM: Removes pallet from Drying Machines
-    A4->>IW: Delivers pallet to Inspection Workers (Setup)
-    loop Each Item in Pallet
-        IW-->>IW: Removes item and removes support (Support Removal)
-        IW-->>IW: Inspects item for defects (Inspection)
-        alt Defect Found
-            IW-->>S: Increases reproduction item count by 1
-            Note right of S: When reproduction item count reaches 50
-            S->>A1: Restarts Process 1 with a new pallet from Pallet Storage
-        else Good Item
-            IW->>B: Places item into Box
-            alt Box is Full
-                B->>S: Sends Box out of the system
-            end
-        end
-    end
-``` -->
+## Requirements
+In the simulator, we utilized simpy library.
+
+## Configuration setting
+If you want to change the settings of the simulation, you can change the settings through the config_SimPy.py.
+
+## Validation
+This link is the validation page of our simulation(3D printing farm) [AIIS_LAB](https://www.notion.so/aiis/3D-printing-farm-professor-version-1bda689291af802093b8c2a052b6b1f8)

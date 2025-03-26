@@ -4,7 +4,7 @@ import random
 """ Simulation settings """
 
 # Simulation time settings
-SIM_TIME = 7 * 24 * 60 * 2  # (unit: minutes)
+SIM_TIME = 7 * 24 * 60  # (unit: minutes)
 
 # Logging and visualization settings
 EVENT_LOGGING = True  # Event logging enable/disable flag
@@ -19,7 +19,7 @@ SHOW_GANTT_DEBUG = False  # 기본값은 False로 설정
 """ Process settings """
 
 # Maximum items in one pallet
-PALLET_SIZE_LIMIT = 50
+PALLET_SIZE_LIMIT = 5
 
 # Process time settings (in minutes)
 PROC_TIME_BUILD = 60  # Process time for build (unit: minutes)
@@ -28,7 +28,7 @@ PROC_TIME_DRY = 60  # Process time for dry (unit: minutes)
 PROC_TIME_INSPECT = 30  # Process time for inspect per item (unit: minutes)
 
 # Machine settings
-NUM_MACHINES_BUILD = 3  # Number of 3D print machines
+NUM_MACHINES_BUILD = 4  # Number of 3D print machines
 NUM_MACHINES_WASH = 1  # Number of wash machines
 NUM_MACHINES_DRY = 1  # Number of dry machines
 CAPACITY_MACHINE_BUILD = 1  # Job capacity for build machines
@@ -42,7 +42,7 @@ NUM_WORKERS_IN_INSPECT = 5  # Number of workers in inspection process
 
 """ Policy settings """
 # Number of defective items to collect for rework
-POLICY_NUM_DEFECT_PER_JOB = 10
+POLICY_NUM_DEFECT_PER_JOB = 5
 # Policy for placing rework jobs in queue
 POLICY_REPROC_SEQ_IN_QUEUE = "QUEUE_LAST"
 # Policy for extracting jobs from queue
@@ -63,7 +63,7 @@ def NUM_PATIENTS_PER_ORDER(): return random.randint(
 
 
 def NUM_ITEMS_PER_PATIENT(): return random.randint(
-    5, 5)
+    10, 10)
 
 
 # Customer settings

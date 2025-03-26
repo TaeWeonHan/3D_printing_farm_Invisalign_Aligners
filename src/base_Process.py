@@ -51,7 +51,7 @@ class Process:
 
     def connect_to_next_process(self, next_process):
         """Connect directly to next process. Used for process initialization."""
-        self.next_process = next_process
+        self.next_process = next_process # next_process is received from mananger file.
         # if self.logger:
         #     self.logger.log_event(
         #         "Process", f"Process {self.name_process} connected to {next_process.name_process}")
@@ -199,6 +199,10 @@ class Process:
 
             # Record job processing history
             process_step = self.create_process_step(job, processor_resource)
+
+            # Debugging
+            # print(f"[Debugging] job{job.id_job} process_step is ", process_step['process'])
+
             if not hasattr(job, 'processing_history'):
                 job.processing_history = []
             job.processing_history.append(process_step)
@@ -250,11 +254,11 @@ class Process:
         """
         # Release processor resource
         processor_resource.release(request)
-        processor_resource.finish_jobs()
+        processor_resource.finish_jobs() # Initialize the job list of resources used by the current process and receive processed jobs
 
         # Trigger resource release event (for event-based approach)
         if hasattr(self, 'resource_trigger'):
-            self.resource_trigger.succeed()
+            self.resource_trigger.succeed() # run the run() method
             # Create new trigger immediately
             self.resource_trigger = self.env.event()
 

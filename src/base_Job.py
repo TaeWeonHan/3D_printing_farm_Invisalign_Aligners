@@ -42,7 +42,7 @@ class JobStore(simpy.Store):
     """
 
     def __init__(self, env, name="JobStore"):
-        super().__init__(env)
+        super().__init__(env) # reset Simpy Store's unique properties
         self.name = name
         self.queue_length_history = []  # Track queue length history
 

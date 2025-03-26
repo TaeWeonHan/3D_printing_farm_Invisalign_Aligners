@@ -64,6 +64,7 @@ class Manager(OrderReceiver):
 
     def create_jobs_for_proc_build(self, order):
         """Convert Order to Jobs based on POLICY_ORDER_TO_JOB"""
+        # order is changed to all paitents and items are extracted from patients
         all_patients = order.list_patients
 
         for patient in all_patients:
@@ -75,21 +76,42 @@ class Manager(OrderReceiver):
                 job = Job(self.next_job_id, patient_items)
                 self.next_job_id += 1
 
+                # Debugging
+                #if self.logger:    
+                #    self.logger.log_event(
+                #        "Manager", f"[Debug] PALLET_SIZE_LIMIT: {PALLET_SIZE_LIMIT}")
+                #    self.logger.log_event(
+                #        "Manager", f"[Debug] # of patient {patient.id_patient} : {len(patient_items)} items")
+                #    self.logger.log_event(
+                #       "Manager", f"[Debug] # of job {job.id_job} : {len(patient_items)} items"
+                #   )
+
                 # Send job to Build process
-                if self.logger:
-                    self.logger.log_event(
-                        "Manager", f"Created job {job.id_job} for patient {patient.id_patient} with {len(patient_items)} items")
+                #if self.logger:
+                #    self.logger.log_event(
+                #        "Manager", f"Created job {job.id_job} for patient {patient.id_patient} with {len(patient_items)} items")
+                
                 self.proc_build.add_to_queue(job)
             else:
                 # Patient's items exceed PALLET_SIZE_LIMIT, apply splitting policy
                 if POLICY_ORDER_TO_JOB == "MAX_PER_JOB":
-                    # Split items into multiple jobs of roughly equal size
+                    
+                    # Debugging
+                    #if self.logger:    
+                    #   self.logger.log_event(
+                    #        "Manager", f"[Debug] PALLET_SIZE_LIMIT: {PALLET_SIZE_LIMIT}")
+                    #    self.logger.log_event(
+                    #        "Manager", f"[Debug] # of patient {patient.id_patient} : {len(patient_items)} items")   
+                    
+                    # Split items into multiple jobs of roughly equal size                         
                     items_per_job = PALLET_SIZE_LIMIT
                     for i in range(0, len(patient_items), items_per_job):
                         job_items = patient_items[i:i+items_per_job]
                         job = Job(self.next_job_id, job_items)
                         self.next_job_id += 1
-
+                        
+                        print(f"[Debug] Created Job {job.id_job} with items: {[item.id_item for item in job.list_items]}")
+                        
                         # Send job to Build process
                         if self.logger:
                             self.logger.log_event(
