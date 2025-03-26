@@ -39,8 +39,8 @@ sequenceDiagram
     end
 ```
 ## Problem Description
-![Image](https://github.com/user-attachments/assets/903d572e-80ad-4a1c-b73f-1909d570003c)
-![Image](https://github.com/user-attachments/assets/ae8cf6ec-f4a5-45da-947f-61dbb3075db5)
+![Problem Description](https://github.com/user-attachments/assets/fb6320f8-66a6-4633-818c-7004ab839035)
+![Gantt Chart](https://github.com/user-attachments/assets/ae8cf6ec-f4a5-45da-947f-61dbb3075db5)
 1. The customer sends an order to the manager that includes patients and the items associated with each patient.
 
 2. The manager converts the order into jobs and forwards those jobs to the 3D printing foundry.
