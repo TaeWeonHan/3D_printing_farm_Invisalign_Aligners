@@ -39,7 +39,7 @@ sequenceDiagram
     end
 ```
 ## Problem Description
-![Problem Description](https://github.com/user-attachments/assets/fb6320f8-66a6-4633-818c-7004ab839035)
+![Problem Description](https://github.com/user-attachments/assets/539c1b0c-0e5d-41d7-a81c-939938d240ea)
 ![Gantt Chart](https://github.com/user-attachments/assets/ae8cf6ec-f4a5-45da-947f-61dbb3075db5)
 1. The customer sends an order to the manager that includes patients and the items associated with each patient.
 
@@ -70,4 +70,4 @@ The processors that have completed processing are marked as available again, all
 If you want to change the settings of the simulation, you can change the settings through the config_SimPy.py.
 
 ## Validation
-This link is the validation page of our simulation(3D printing farm) [AIIS_LAB](https://www.notion.so/aiis/3D-printing-farm-professor-version-1bda689291af802093b8c2a052b6b1f8)
+More details of our simulator (3D printing farm), you can see this page [AIIS_LAB](https://www.notion.so/aiis/SimPy-based-3D-Printing-Farm-Simulation-11ea689291af8066ae94e1db740b4588)

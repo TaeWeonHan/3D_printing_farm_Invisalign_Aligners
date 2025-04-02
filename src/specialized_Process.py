@@ -10,12 +10,30 @@ class Proc_Build(Process):
     inherits from Process class  
     """
 
-    def __init__(self, env, logger=None):
+    def __init__(self, env, logger=None, manager=None):
         super().__init__("Proc_Build", env, logger)
+        self.manager = manager
 
         # Initialize 3D printing machines
         for i in range(NUM_MACHINES_BUILD):
             self.register_processor(Mach_3DPrint(i+1))
+
+    def acquire_pallet(self, job):
+        """It is a method of acquiring pallets and binding them to jobs in the Build stage."""
+        pallet_resource = self.manager.pallet_resource
+        # acquire a pallet
+        pallet = yield self.env.process(pallet_resource.acquire())
+        pallet.assign_job(job)
+        pallet.current_process = "Build"
+        if self.logger:
+            self.logger.log_event("Pallet", f"Job {job.id_job} acquired Pallet {pallet.id} at Build")
+        return pallet    
+
+    def apply_pallet_management_before(self, jobs):
+        """새 hook: Build 단계에서 각 job에 대해 Pallet 획득 처리"""
+        for job in jobs:
+            if not hasattr(job, 'pallet') or job.pallet is None:
+                yield self.env.process(self.acquire_pallet(job))
 
     def apply_special_processing(self, processor, jobs):
         """3D Printing special processing - possibility of defects"""
@@ -90,6 +108,23 @@ class Proc_Inspect(Process):
 
         # Defective items repository
         self.defective_items = []
+
+    def release_pallet(self, job):
+        """Method of returning pallets in Inspect step"""
+        pallet_resource = self.manager.pallet_resource
+        pallet = job.pallet
+        if pallet:
+            if self.logger:
+                self.logger.log_event("Pallet", f"Job {job.id_job} releasing Pallet {pallet.id} at Inspect")
+            # Upon return, reset the status of the pallet and return it to the resource
+            yield self.env.process(pallet_resource.release(pallet))
+            job.pallet = None
+
+    def apply_pallet_management_after(self, jobs):
+        """Pallet return processing for each job in Inspect step"""
+        for job in jobs:
+            if hasattr(job, 'pallet') and job.pallet is not None:
+                yield self.env.process(self.release_pallet(job))
 
     def apply_special_processing(self, processor, jobs):
         """Inspection process special processing - defect identification"""
