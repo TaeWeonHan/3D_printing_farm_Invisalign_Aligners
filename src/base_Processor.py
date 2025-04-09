@@ -137,7 +137,7 @@ class ProcessorResource(simpy.Resource):
         result = super().release(request)
 
         # Reset processing flag when all jobs are complete
-        if self.count == 0: # self.count = # of requested resource
+        if self.count == 0:
             self.processing_started = False
             if self.processor_type == "Machine":
                 self.current_jobs = []
@@ -155,7 +155,7 @@ class ProcessorResource(simpy.Resource):
             return False
 
         # Available if capacity has room
-        return self.count < self.capacity  # Use count attribute instead of count(), if self.count < self.capacity -> True, else: False
+        return self.count < self.capacity  # Use count attribute instead of count()
 
     def start_job(self, job):
         """Process job start"""
@@ -179,11 +179,10 @@ class ProcessorResource(simpy.Resource):
             return self.current_jobs
         else:  # Worker
             return [self.current_job] if self.current_job else []
-         #  return self.current_jobs
 
     def finish_jobs(self):
         """Process job completion"""
-        jobs = self.get_jobs() # Save the job currently being processed to the jobs object
+        jobs = self.get_jobs()
 
         if self.processor_type == "Machine":
             self.current_jobs = []

@@ -102,10 +102,9 @@ if __name__ == "__main__":
                                   for patient in order.list_patients)
         print(
             f"Order {order.id_order}: {order.num_patients} patients, {total_patient_items} items")
-        """
+
         # Show only first 5 orders in detail if there are too many
         if i >= 5 and len(order_receiver.received_orders) > 10:
             print(
                 f"... and {len(order_receiver.received_orders) - 5} more orders")
             break
-        """

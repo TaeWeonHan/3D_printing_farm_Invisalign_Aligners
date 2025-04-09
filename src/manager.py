@@ -2,7 +2,7 @@ from base_Job import Job
 from config_SimPy import *
 from specialized_Process import Proc_Build, Proc_Wash, Proc_Dry, Proc_Inspect
 from base_Customer import OrderReceiver
-from base_Pallet import BasePalletResource
+
 
 class Manager(OrderReceiver):
     """
@@ -24,12 +24,6 @@ class Manager(OrderReceiver):
 
         # Tracking completed jobs and orders
         self.completed_orders = []
-        
-        # Create PalletResources
-        self.pallet_resource = BasePalletResource(env, NUM_PALLETS, PALLET_SIZE_LIMIT)
-        
-        # Pallet store for accumulating jobs
-        self.pallet_store = []
 
         # When calling setup_processes, the manager (self) itself is also passed as an argument
         self.setup_processes(manager=self)
@@ -37,7 +31,7 @@ class Manager(OrderReceiver):
     def setup_processes(self, manager=None):
         """Create and connect all manufacturing processes"""
         # Create processes
-        self.proc_build = Proc_Build(self.env, self.logger, manager)
+        self.proc_build = Proc_Build(self.env, self.logger)
         self.proc_wash = Proc_Wash(self.env, self.logger)
         self.proc_dry = Proc_Dry(self.env, self.logger)
         self.proc_inspect = Proc_Inspect(self.env, manager, self.logger)
@@ -46,7 +40,7 @@ class Manager(OrderReceiver):
         self.proc_build.connect_to_next_process(self.proc_wash)
         self.proc_wash.connect_to_next_process(self.proc_dry)
         self.proc_dry.connect_to_next_process(self.proc_inspect)
-
+        
         if self.logger:
             self.logger.log_event(
                 "Manager", "Manufacturing processes created and connected")
@@ -67,79 +61,46 @@ class Manager(OrderReceiver):
 
     def create_jobs_for_proc_build(self, order):
         """Convert Order to Jobs based on POLICY_ORDER_TO_JOB"""
-        # order is changed to all paitents and items are extracted from patients
         all_patients = order.list_patients
 
         for patient in all_patients:
             patient_items = patient.list_items
 
-            # If patient's items fit within JOB_SIZE_LIMIT, create a single job
-            if len(patient_items) <= JOB_SIZE_LIMIT:
+            # If patient's items fit within PALLET_SIZE_LIMIT, create a single job
+            if len(patient_items) <= PALLET_SIZE_LIMIT:
                 # Create a job with all items from this patient
                 job = Job(self.next_job_id, patient_items)
                 self.next_job_id += 1
 
-                # Debugging
-                #if self.logger:    
-                #    self.logger.log_event(
-                #        "Manager", f"[Debug] JOB_SIZE_LIMIT: {JOB_SIZE_LIMIT}")
-                #    self.logger.log_event(
-                #        "Manager", f"[Debug] # of patient {patient.id_patient} : {len(patient_items)} items")
-                #    self.logger.log_event(
-                #       "Manager", f"[Debug] # of job {job.id_job} : {len(patient_items)} items"
-                #   )
-
                 # Send job to Build process
-                #if self.logger:
-                #    self.logger.log_event(
-                #        "Manager", f"Created job {job.id_job} for patient {patient.id_patient} with {len(patient_items)} items")
+                if self.logger:
+                    self.logger.log_event(
+                        "Manager", f"Created job {job.id_job} for patient {patient.id_patient} with {len(patient_items)} items")
+                
+                # Validation code
+                # print("Manager", f"Created job {job.id_job} for patient {patient.id_patient} with {len(patient_items)} items")
                 
                 self.proc_build.add_to_queue(job)
             else:
-                # Patient's items exceed JOB_SIZE_LIMIT, apply splitting policy
+                # Patient's items exceed PALLET_SIZE_LIMIT, apply splitting policy
                 if POLICY_ORDER_TO_JOB == "MAX_PER_JOB":
-                    
-                    # Debugging
-                    #if self.logger:    
-                    #   self.logger.log_event(
-                    #        "Manager", f"[Debug] JOB_SIZE_LIMIT: {JOB_SIZE_LIMIT}")
-                    #    self.logger.log_event(
-                    #        "Manager", f"[Debug] # of patient {patient.id_patient} : {len(patient_items)} items")   
-                    
-                    # Split items into multiple jobs of roughly equal size                         
+                    # Split items into multiple jobs of roughly equal size
                     items_per_job = PALLET_SIZE_LIMIT
                     for i in range(0, len(patient_items), items_per_job):
                         job_items = patient_items[i:i+items_per_job]
                         job = Job(self.next_job_id, job_items)
                         self.next_job_id += 1
-                        
-                        print(f"[Debug] Created Job {job.id_job} with items: {[item.id_item for item in job.list_items]}")
-                        
+
                         # Send job to Build process
                         if self.logger:
                             self.logger.log_event(
                                 "Manager", f"Created job {job.id_job} for patient {patient.id_patient} with {len(job_items)} items (split job)")
-                        
-                        # Add job to pallet store instead of directly to build process
-                        self.create_pallets_for_proc_build(job)
+                            
+                        # Validation code
+                        # print("Manager", f"Created job {job.id_job} for patient {patient.id_patient} with {len(job_items)} items (split job)")
+                        self.proc_build.add_to_queue(job)
 
                 # Additional policies can be implemented here if needed
-
-    def create_pallets_for_proc_build(self, job):
-        """Create pallets for Build process when PALLET_SIZE_LIMIT is reached"""
-        self.pallet_store.append(job)
-
-        if len(self.pallet_store) == PALLET_SIZE_LIMIT:
-            # Create a pallet with accumulated jobs
-            pallet = self.pallet_store
-
-            if self.logger:
-                self.logger.log_event("Manager", 
-                    f"Pallet {pallet.id} created with {len(self.pallet_store)} job(s)")
-            
-            # Send pallet to Build process
-            self.proc_build.add_to_queue(pallet)
-            self.pallet_store = []
 
     def create_job_for_defects(self):
         """Create jobs for defective items that need rework"""
@@ -169,8 +130,8 @@ class Manager(OrderReceiver):
 
             # Add the job to the Build process queue according to policy
             if POLICY_REPROC_SEQ_IN_QUEUE == "QUEUE_LAST":
-                # create pallets for rework job
-                self.create_pallets_for_proc_build(job)
+                # Add job to the end of the queue
+                self.proc_build.add_to_queue(job)
                 if self.logger:
                     self.logger.log_event(
                         "Manager", f"Created rework job {job.id_job} with {len(items_for_job)} defective items (added to end of queue)")

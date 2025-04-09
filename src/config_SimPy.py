@@ -4,7 +4,7 @@ import random
 """ Simulation settings """
 
 # Simulation time settings
-SIM_TIME = 5 * 24 * 60  # (unit: minutes)
+SIM_TIME = 7 * 24 * 60  # (unit: minutes)
 
 # Logging and visualization settings
 EVENT_LOGGING = True  # Event logging enable/disable flag
@@ -18,42 +18,31 @@ SHOW_GANTT_DEBUG = False  # 기본값은 False로 설정
 
 """ Process settings """
 
-# Maximum job in one pallet
-PALLET_SIZE_LIMIT = 5
-
-# Maximum items in one job
-JOB_SIZE_LIMIT = 5
+# Maximum items in one pallet
+PALLET_SIZE_LIMIT = 50
 
 # Process time settings (in minutes)
-PROC_TIME_BUILD = 60  # Process time for build (unit: minutes)
-PROC_TIME_WASH = 60  # Process time for wash (unit: minutes)
-PROC_TIME_DRY = 60  # Process time for dry (unit: minutes)
-PROC_TIME_INSPECT = 30  # Process time for inspect per item (unit: minutes)
+PROC_TIME_BUILD = 180  # Process time for build (unit: minutes)
+PROC_TIME_WASH = 120  # Process time for wash (unit: minutes)
+PROC_TIME_DRY = 120  # Process time for dry (unit: minutes)
+PROC_TIME_INSPECT = 120  # Process time for inspect per item (unit: minutes)
 
 # Machine settings
-NUM_MACHINES_BUILD = 4  # Number of 3D print machines
+NUM_MACHINES_BUILD = 3  # Number of 3D print machines
 NUM_MACHINES_WASH = 1  # Number of wash machines
 NUM_MACHINES_DRY = 1  # Number of dry machines
-CAPACITY_MACHINE_BUILD = 1  # Pallet capacity for build machines
-CAPACITY_MACHINE_WASH = 2  # Pallet capacity for wash machines
-CAPACITY_MACHINE_DRY = 2  # Pallet capacity for dry machines
+CAPACITY_MACHINE_BUILD = 1  # Job capacity for build machines
+CAPACITY_MACHINE_WASH = 2  # Job capacity for wash machines
+CAPACITY_MACHINE_DRY = 2  # Job capacity for dry machines
 
 # Process settings
-DEFECT_RATE_PROC_BUILD = 0.07  # 5% defect rate in build process
+DEFECT_RATE_PROC_BUILD = 0  # 5% defect rate in build process
 NUM_WORKERS_IN_INSPECT = 5  # Number of workers in inspection process
 
-# Pallet settings
-NUM_PALLETS = 20  # Number of pallets
-
-# Moving time settings (in minutes)
-MOVING_TIME_FIRST_STORE_TO_BUILD = 5  # Moving time from store to build (unit: minutes)
-MOVING_TIME_BUILD_TO_B_STACK = 5  # Moving time from build to build stack (unit: minutes)
-MOVING_TIME_WASH_TO_DRY = 5  # Moving time from wash to dry (unit: minutes)
-MOVING_TIME_DRY_TO_FSOTRE = 5  # Moving time from dry to build (unit: minutes)
 
 """ Policy settings """
 # Number of defective items to collect for rework
-POLICY_NUM_DEFECT_PER_JOB = 8 
+POLICY_NUM_DEFECT_PER_JOB = 10
 # Policy for placing rework jobs in queue
 POLICY_REPROC_SEQ_IN_QUEUE = "QUEUE_LAST"
 # Policy for extracting jobs from queue
@@ -74,10 +63,10 @@ def NUM_PATIENTS_PER_ORDER(): return random.randint(
 
 
 def NUM_ITEMS_PER_PATIENT(): return random.randint(
-    10, 10)
+    5, 5)
 
 
 # Customer settings
-CUST_ORDER_CYCLE = 24 * 60  # Customer order cycle (1 week in minutes)
+CUST_ORDER_CYCLE = 2 * 24 * 60  # Customer order cycle (1 week in minutes)
 # Order settings
 ORDER_DUE_DATE = 7 * 24 * 60  # Order due date (1 week in minutes)

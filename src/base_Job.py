@@ -26,9 +26,7 @@ class Job:
         self.time_waiting_start = None
         self.time_waiting_end = None
         self.is_reprocess = False  # Flag for reprocessed jobs
-        self.pallet = None    # Pallet 객체 참조 (처음엔 없음)
-        self.pallet_id = None # 팔레트 ID (선택적으로 저장)
-        
+
         # Add processing history to track jobs across all processes
         self.processing_history = []  # Will store each process step details
 
@@ -44,7 +42,7 @@ class JobStore(simpy.Store):
     """
 
     def __init__(self, env, name="JobStore"):
-        super().__init__(env) # reset Simpy Store's unique properties
+        super().__init__(env)
         self.name = name
         self.queue_length_history = []  # Track queue length history
 

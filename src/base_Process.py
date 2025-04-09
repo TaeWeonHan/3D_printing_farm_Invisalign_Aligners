@@ -40,7 +40,7 @@ class Process:
 
         # Add new events
         self.resource_trigger = env.event()
-        self.pallet_added_trigger = env.event()
+        self.job_added_trigger = env.event()
 
         # Start simulation process
         self.process = env.process(self.run())
@@ -51,10 +51,13 @@ class Process:
 
     def connect_to_next_process(self, next_process):
         """Connect directly to next process. Used for process initialization."""
-        self.next_process = next_process # next_process is received from mananger file.
+        self.next_process = next_process
         # if self.logger:
         #     self.logger.log_event(
         #         "Process", f"Process {self.name_process} connected to {next_process.name_process}")
+        
+        # validation
+        # print(f"Process {self.name_process} connected to {next_process.name_process}")
 
     def register_processor(self, processor):
         """Register processor (Machine or Worker). Used for process initialization."""
@@ -76,20 +79,25 @@ class Process:
         # if self.logger:
         #     self.logger.log_event(
         #         "Resource", f"Registered {processor.type_processor} {processor_name} to process {self.name_process}")
+        
+        # validation
+        # if processor_resource.processor_type == "Machine":
+        #     print("Resource", f"Registered {processor_resource.name} | Capacity {processor_resource.capacity} | Processing time {processor_resource.processing_time} | to process {self.name_process}")
+        # else:
+        #     print("Resource", f"Registered {processor_resource.name} | Processing time {processor_resource.processing_time} |to process {self.name_process}")
 
-    def add_to_queue(self, pallet):
+    def add_to_queue(self, job):
         """Add job to queue"""
-        for job in pallet:
-            job.time_waiting_start = self.env.now
-            job.workstation["Process"] = self.name_process
+        job.time_waiting_start = self.env.now
+        job.workstation["Process"] = self.name_process
 
         # Add job to JobStore
-        self.job_store.put(pallet)
+        self.job_store.put(job)
 
         # Trigger job added event
-        self.pallet_added_trigger.succeed()
+        self.job_added_trigger.succeed()
         # Create new trigger immediately
-        self.pallet_added_trigger = self.env.event()
+        self.job_added_trigger = self.env.event()
 
         if self.logger:
             self.logger.log_event(
@@ -108,7 +116,7 @@ class Process:
         while True:
             # print(f"[DEBUG] {self.name_process}: waiting for events")
             # Wait for events: until job is added or resource is released
-            yield self.pallet_added_trigger | self.resource_trigger
+            yield self.job_added_trigger | self.resource_trigger
             # print(
             #     f"[DEBUG] {self.name_process}: event triggered! time={self.env.now}")
 
@@ -149,7 +157,7 @@ class Process:
             #     f"[DEBUG] {self.name_process}: attempting to process with {processor_resource.name}")
             # Determine number of jobs to assign (up to capacity)
             remaining_capacity = processor_resource.capacity - processor_resource.count
-            pallets_to_assign = []
+            jobs_to_assign = []
 
             # Assign jobs
             try:
@@ -157,18 +165,18 @@ class Process:
                     if not self.job_store.is_empty:
                         # print(
                         #     f"[DEBUG] {self.name_process}: attempting to get job {i+1}")
-                        pallet = yield self.job_store.get()
+                        job = yield self.job_store.get()
                         # print(
                         #     f"[DEBUG] {self.name_process}: retrieved job {job.id_job}")
-                        pallets_to_assign.append(pallet)
+                        jobs_to_assign.append(job)
             except Exception as e:
                 # Continue if unable to get job from JobStore
                 print(f"[ERROR] {self.name_process}: failed to get job: {e}")
 
             # Assign jobs to processor
-            if pallets_to_assign:
+            if jobs_to_assign:
                 processor_assignments.append(
-                    (processor_resource, pallets_to_assign))
+                    (processor_resource, jobs_to_assign))
                 # yield self.env.process(self.delay_resources(processor_resource, jobs_to_assign))
 
         # Process jobs with assigned processors in parallel
@@ -200,10 +208,6 @@ class Process:
 
             # Record job processing history
             process_step = self.create_process_step(job, processor_resource)
-
-            # Debugging
-            # print(f"[Debugging] job{job.id_job} process_step is ", process_step['process'])
-
             if not hasattr(job, 'processing_history'):
                 job.processing_history = []
             job.processing_history.append(process_step)
@@ -212,17 +216,9 @@ class Process:
         request = processor_resource.request()
         yield request
 
-        # 새로운 hook: Pallet 관리(예, Build 단계에서 Pallet 획득)
-        if hasattr(self, 'apply_pallet_management_before'):
-            yield self.env.process(self.apply_pallet_management_before(jobs))
-
         # Calculate and wait for processing time
         processing_time = processor_resource.processing_time
         yield self.env.timeout(processing_time)
-
-        # 새로운 hook: Pallet 관리(예, Inspect 단계에서 Pallet 반납)
-        if hasattr(self, 'apply_pallet_management_after'):
-            yield self.env.process(self.apply_pallet_management_after(jobs))    
 
         # Special processing (if needed)
         if hasattr(self, 'apply_special_processing'):
@@ -263,11 +259,11 @@ class Process:
         """
         # Release processor resource
         processor_resource.release(request)
-        processor_resource.finish_jobs() # Initialize the job list of resources used by the current process and receive processed jobs
+        processor_resource.finish_jobs()
 
         # Trigger resource release event (for event-based approach)
         if hasattr(self, 'resource_trigger'):
-            self.resource_trigger.succeed() # run the run() method
+            self.resource_trigger.succeed()
             # Create new trigger immediately
             self.resource_trigger = self.env.event()
 
@@ -275,30 +271,30 @@ class Process:
             self.logger.log_event(
                 "Resource", f"Released {processor_resource.name} in {self.name_process}")
 
-    def create_process_step(self, pallet, processor_resource):
-        """Create process step for pallet history"""
+    def create_process_step(self, job, processor_resource):
+        """Create process step for job history"""
         return {
             'process': self.name_process,
             'resource_type': processor_resource.processor_type,
             'resource_id': processor_resource.id,
             'resource_name': processor_resource.name,
-            'start_time': pallet.time_processing_start,
+            'start_time': job.time_processing_start,
             'end_time': None,
             'duration': None
         }
 
-    def send_job_to_next(self, pallet):
+    def send_job_to_next(self, job):
         """Send job to next process"""
         if self.next_process:
             if self.logger:
                 self.logger.log_event(
-                    "Process Flow", f"Moving Pallet {pallet.id_job} from {self.name_process} to {self.next_process.name_process}")
+                    "Process Flow", f"Moving job {job.id_job} from {self.name_process} to {self.next_process.name_process}")
             # Add job to next process queue
-            self.next_process.add_to_queue(pallet)
+            self.next_process.add_to_queue(job)
             return True
         else:
             # Final process or no next process set
             if self.logger:
                 self.logger.log_event(
-                    "Process Flow", f"Job {pallet.id_job} completed at {self.name_process} (final process)")
+                    "Process Flow", f"Job {job.id_job} completed at {self.name_process} (final process)")
             return False
