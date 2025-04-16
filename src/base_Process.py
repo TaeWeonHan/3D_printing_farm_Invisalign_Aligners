@@ -20,10 +20,12 @@ class Process:
         process (simpy.Process): Main process execution
     """
 
-    def __init__(self, name_process, env, logger=None):
+    def __init__(self, name_process, env, logger=None, manager_validation_logger=None, process_validation_logger=None):
         self.name_process = name_process
         self.env = env
         self.logger = logger
+        self.manager_validation_logger = manager_validation_logger
+        self.process_validation_logger = process_validation_logger
         self.list_processors = []  # Processor list
 
         # Implement queue with JobStore (Inherits SimPy Store)
@@ -57,7 +59,9 @@ class Process:
         #         "Process", f"Process {self.name_process} connected to {next_process.name_process}")
         
         # validation
-        # print(f"Process {self.name_process} connected to {next_process.name_process}")
+        if self.manager_validation_logger:
+            self.manager_validation_logger.log_event(
+                "Process", f"Process {self.name_process} connected to {next_process.name_process}")
 
     def register_processor(self, processor):
         """Register processor (Machine or Worker). Used for process initialization."""
@@ -81,10 +85,14 @@ class Process:
         #         "Resource", f"Registered {processor.type_processor} {processor_name} to process {self.name_process}")
         
         # validation
-        # if processor_resource.processor_type == "Machine":
-        #     print("Resource", f"Registered {processor_resource.name} | Capacity {processor_resource.capacity} | Processing time {processor_resource.processing_time} | to process {self.name_process}")
-        # else:
-        #     print("Resource", f"Registered {processor_resource.name} | Processing time {processor_resource.processing_time} |to process {self.name_process}")
+        if processor_resource.processor_type == "Machine":
+            if self.manager_validation_logger:
+                self.manager_validation_logger.log_event(
+                    "Resource", f"Registered {processor_resource.name} | Capacity {processor_resource.capacity} | Processing time {processor_resource.processing_time} | to process {self.name_process}")
+        else:
+            if self.manager_validation_logger:
+                self.manager_validation_logger.log_event(
+                    "Resource", f"Registered {processor_resource.name} | Processing time {processor_resource.processing_time} |to process {self.name_process}")
 
     def add_to_queue(self, job):
         """Add job to queue"""
@@ -101,6 +109,11 @@ class Process:
 
         if self.logger:
             self.logger.log_event(
+                "Queue", f"Added job {job.id_job} to {self.name_process} queue. Queue length: {self.job_store.size}")
+            
+        # validation
+        if self.manager_validation_logger:
+            self.manager_validation_logger.log_event(
                 "Queue", f"Added job {job.id_job} to {self.name_process} queue. Queue length: {self.job_store.size}")
 
     def run(self):

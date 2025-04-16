@@ -36,7 +36,7 @@ class Patient:
         item_counter: Counter for item IDs
     """
 
-    def __init__(self, id_order, id_patient):
+    def __init__(self, id_order, id_patient, customer_validation_logger):
         """
         Create a patient with the given IDs.
 
@@ -50,6 +50,7 @@ class Patient:
         self.list_items = []
         self.is_completed = False
         self.item_counter = 1
+        self.customer_validation_logger = customer_validation_logger
 
         # Create items for this patient using the provided function
         self.list_items = self._create_items_for_patient(
@@ -63,9 +64,10 @@ class Patient:
             item = Item(id_order, id_patient, item_id)
             items.append(item)
 
-            # # Debugging
-            # print(f"[DEBUG] Order {id_order} - Patient {id_patient}: Created Item {item_id} with type: {item.type_item}")
-
+            # # validation
+            if self.customer_validation_logger:
+                self.customer_validation_logger.log_event("Patient", f"Order {id_order} - Patient {id_patient}: Created Item {item_id} with type: {item.type_item}")
+                
         return items
 
     def _get_next_item_id(self):
@@ -96,7 +98,7 @@ class Order:
 
     """
 
-    def __init__(self, id_order):
+    def __init__(self, id_order, customer_validation_logger):
         """
         Create an order with the given ID.
 
@@ -110,6 +112,7 @@ class Order:
         self.time_start = None
         self.time_end = None
         self.patient_counter = 1
+        self.customer_validation_logger = customer_validation_logger
 
         # Create patients for this order using the provided function
         self.list_patients = self._create_patients_for_order(
@@ -121,13 +124,12 @@ class Order:
         for _ in range(num_patients):
             patient_id = self._get_next_patient_id()
             
-            patient = Patient(id_order, patient_id)
+            patient = Patient(id_order, patient_id, self.customer_validation_logger)
             patients.append(patient)
 
-            ## Debugging: Print patient and item details
-            # print(f"[Debug] Order {id_order}: Created Patient {patient_id} with items:")
-            # for item in patient.list_items:
-            #     print(f"    Item ID: {item.id_item} (Type: {item.type_item})")
+            # # validation
+            if self.customer_validation_logger:
+                self.customer_validation_logger.log_event("Patient", f"Created Patient {patient.id_patient} with {len(patient.list_items)} items")
 
         return patients
 
@@ -152,14 +154,16 @@ class Customer:
         env: Simulation environment
         order_receiver: Order receiver object
         logger: Logger object
+        coustomer_validation_logger: validation Logger object
         order_counter: Counter for order IDs
         processing: Process for creating orders
     """
 
-    def __init__(self, env, order_receiver, logger):
+    def __init__(self, env, order_receiver, logger, customer_validation_logger):
         self.env = env
         self.order_receiver = order_receiver
         self.logger = logger
+        self.customer_validation_logger = customer_validation_logger
 
         # Initialize ID counters
         self.order_counter = 1
@@ -178,19 +182,20 @@ class Customer:
         while True:
             # Create a new order
             order_id = self.get_next_order_id()
-            order = Order(order_id)
+            order = Order(order_id, self.customer_validation_logger)
             order.time_start = self.env.now
 
             # # Log order creation
             #  self.logger.log_event(
             #     "Order", f"Created Order {order.id_order} (Patients: {order.num_patients}, Total items: {sum(len(patient.list_items) for patient in order.list_patients)})")
             
-            # # Debugging
-            # patient_details_str = "\n".join(
-            #    f"    Patient ID: {patient.id_patient}\n" +
-            #    "\n".join(f"        Item ID: {item.id_item}" for item in patient.list_items) for patient in order.list_patients)
-            # print(f"check: Order {order.id_order} consists of patients and their items:\n{patient_details_str}")
-            
+            # # Validation
+            if self.customer_validation_logger:
+                patient_details_str = "\n".join(
+                    f"    Patient ID: {patient.id_patient}\n" +
+                    "\n".join(f"        Item ID: {item.id_item}" for item in patient.list_items) for patient in order.list_patients)
+                self.customer_validation_logger.log_event(
+                    "Order", f"Created Order {order.id_order} with {order.num_patients} patients and their items:\n{patient_details_str}")
             # Send the order
             self.send_order(order)
 
@@ -202,6 +207,12 @@ class Customer:
         # if self.logger:
         #     self.logger.log_event(
         #         "Order", f"Sending Order {order.id_order} to processor")
+        
+        # # validation
+        if self.customer_validation_logger:
+            self.customer_validation_logger.log_event(
+                "Order", f"Sending Order {order.id_order} to processor"
+            )
         self.order_receiver.receive_order(order)
 
 

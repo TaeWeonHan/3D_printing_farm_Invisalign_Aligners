@@ -11,13 +11,16 @@ class Manager(OrderReceiver):
     Attributes:
         env (simpy.Environment): Simulation environment
         logger (Logger): Logger object for logging events
+        manager_validation_logger (Logger): Logger object for logging validation events
         next_job_id (int): Next job ID counter
         completed_orders (list): List of completed orders 
     """
 
-    def __init__(self, env, logger=None):
+    def __init__(self, env, logger=None, manager_validation_logger=None, process_validation_logger=None):
         self.env = env
         self.logger = logger
+        self.manager_validation_logger = manager_validation_logger
+        self.process_validation_logger = process_validation_logger
 
         # Next job ID counter
         self.next_job_id = 1
@@ -31,10 +34,10 @@ class Manager(OrderReceiver):
     def setup_processes(self, manager=None):
         """Create and connect all manufacturing processes"""
         # Create processes
-        self.proc_build = Proc_Build(self.env, self.logger)
-        self.proc_wash = Proc_Wash(self.env, self.logger)
-        self.proc_dry = Proc_Dry(self.env, self.logger)
-        self.proc_inspect = Proc_Inspect(self.env, manager, self.logger)
+        self.proc_build = Proc_Build(self.env, self.logger, self.manager_validation_logger, self.process_validation_logger)
+        self.proc_wash = Proc_Wash(self.env, self.logger, self.manager_validation_logger, self.process_validation_logger)
+        self.proc_dry = Proc_Dry(self.env, self.logger, self.manager_validation_logger, self.process_validation_logger)
+        self.proc_inspect = Proc_Inspect(self.env, manager, self.logger, self.manager_validation_logger, self.process_validation_logger)
 
         # Connect processes
         self.proc_build.connect_to_next_process(self.proc_wash)
@@ -50,6 +53,14 @@ class Manager(OrderReceiver):
         if self.logger:
             self.logger.log_event(
                 "Order", f"Received Order {order.id_order} with {order.num_patients} patients")
+
+        # Validation code
+        # if self.manager_validation_logger:
+        #     patient_details_str = "\n".join(
+        #        f"    Patient ID: {patient.id_patient}\n" +
+        #        "\n".join(f"        Item ID: {item.id_item}" for item in patient.list_items) for patient in order.list_patients)
+        #     self.manager_validation_logger.log_event(
+        #             "Order", f"Received Order {order.id_order} with {order.num_patients} patients and their items:\n{patient_details_str}")
 
         # Mark order start time
         order.time_start = self.env.now
@@ -78,7 +89,7 @@ class Manager(OrderReceiver):
                         "Manager", f"Created job {job.id_job} for patient {patient.id_patient} with {len(patient_items)} items")
                 
                 # Validation code
-                # print("Manager", f"Created job {job.id_job} for patient {patient.id_patient} with {len(patient_items)} items")
+                print("Manager", f"Created job {job.id_job} for patient {patient.id_patient} with {len(patient_items)} items")
                 
                 self.proc_build.add_to_queue(job)
             else:

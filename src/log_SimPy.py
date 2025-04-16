@@ -6,6 +6,26 @@ from datetime import datetime, timedelta
 import numpy as np
 from config_SimPy import *
 
+class ValidationLogger:
+    def __init__(self, env, logger_type):
+        self.env = env
+        self.logger_type = logger_type.lower()
+
+    def log_event(self, event_type, message):
+        current_time = self.env.now
+        days = int(current_time // (24 * 60))
+        hours = int((current_time % (24 * 60)) // 60)
+        minutes = int(current_time % 60)
+        timestamp = f"{days:02d}:{hours:02d}:{minutes:02d}"
+        total_minutes = int(current_time)
+
+        # 역할에 따라 해당 플래그만 체크합니다.
+        if self.logger_type == "manager" and MANAGER_EVENT_LOGGING:
+            print(f"[{timestamp}] [{total_minutes}] | {event_type}: {message}")
+        elif self.logger_type == "customer" and CUSTOMER_EVENT_LOGGING:
+            print(f"[{timestamp}] [{total_minutes}] | {event_type}: {message}")
+        elif self.logger_type == "process" and PROCESS_EVENT_LOGGING:
+            print(f"[{timestamp}] [{total_minutes}] | {event_type}: {message}")
 
 class Logger:
     def __init__(self, env):

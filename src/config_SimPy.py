@@ -7,8 +7,13 @@ import random
 SIM_TIME = 7 * 24 * 60  # (unit: minutes)
 
 # Logging and visualization settings
-EVENT_LOGGING = True  # Event logging enable/disable flag
+EVENT_LOGGING = False  # Event logging enable/disable flag
 DETAILED_STATS_ENABLED = True  # Detailed statistics display flag
+
+# Validation settings flags
+CUSTOMER_EVENT_LOGGING = False  # Customer event logging enable/disable flag
+MANAGER_EVENT_LOGGING = True  # Manager event logging enable/disable flag
+PROCESS_EVENT_LOGGING = False  # Process event logging enable/disable flag
 
 # Visualization flags
 GANTT_CHART_ENABLED = True  # Gantt chart visualization enable/disable flag
@@ -63,10 +68,10 @@ def NUM_PATIENTS_PER_ORDER(): return random.randint(
 
 
 def NUM_ITEMS_PER_PATIENT(): return random.randint(
-    5, 5)
+    3, 3)
 
 
 # Customer settings
-CUST_ORDER_CYCLE = 2 * 24 * 60  # Customer order cycle (1 week in minutes)
+CUST_ORDER_CYCLE = 4 * 24 * 60  # Customer order cycle (1 week in minutes)
 # Order settings
 ORDER_DUE_DATE = 7 * 24 * 60  # Order due date (1 week in minutes)

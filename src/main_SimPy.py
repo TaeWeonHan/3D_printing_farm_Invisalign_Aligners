@@ -3,7 +3,7 @@ import simpy
 import random
 from base_Customer import Customer
 from manager import Manager
-from log_SimPy import Logger
+from log_SimPy import Logger, ValidationLogger
 from config_SimPy import *
 
 
@@ -17,11 +17,20 @@ def run_simulation(sim_duration=SIM_TIME):
     # Create logger with env
     logger = Logger(env)
 
+    # Create Customer validation logger with env
+    customer_validation_logger = ValidationLogger(env, "customer")
+
+    # Create managervalidation logger with env
+    manager_validation_logger = ValidationLogger(env, "manager")
+
+    # Create Process validation logger with env
+    process_validation_logger = ValidationLogger(env, "process")
+
     # Create manager and provide logger
-    manager = Manager(env, logger)
+    manager = Manager(env, logger, manager_validation_logger, process_validation_logger)
 
     # Create customer to generate orders
-    Customer(env, manager, logger)
+    Customer(env, manager, logger, customer_validation_logger)
 
     # Run simulation
     print("\nStarting simulation...")

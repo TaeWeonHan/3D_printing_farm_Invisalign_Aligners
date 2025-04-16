@@ -10,8 +10,8 @@ class Proc_Build(Process):
     inherits from Process class  
     """
 
-    def __init__(self, env, logger=None):
-        super().__init__("Proc_Build", env, logger)
+    def __init__(self, env, logger=None, manager_validation_logger=None, process_validation_logger=None):
+        super().__init__("Proc_Build", env, logger, manager_validation_logger, process_validation_logger)
 
         # Initialize 3D printing machines
         for i in range(NUM_MACHINES_BUILD):
@@ -34,8 +34,8 @@ class Proc_Wash(Process):
     inherits from Process class   
     """
 
-    def __init__(self, env, logger=None):
-        super().__init__("Proc_Wash", env, logger)
+    def __init__(self, env, logger=None, manager_validation_logger=None, process_validation_logger=None):
+        super().__init__("Proc_Wash", env, logger, manager_validation_logger, process_validation_logger)
 
         # Initialize wash machines
         for i in range(NUM_MACHINES_WASH):
@@ -48,8 +48,8 @@ class Proc_Dry(Process):
     inherits from Process class
     """
 
-    def __init__(self, env, logger=None):
-        super().__init__("Proc_Dry", env, logger)
+    def __init__(self, env, logger=None, manager_validation_logger=None, process_validation_logger=None):
+        super().__init__("Proc_Dry", env, logger, manager_validation_logger, process_validation_logger)
 
         # Initialize dry machines
         for i in range(NUM_MACHINES_DRY):
@@ -62,8 +62,8 @@ class Proc_Inspect(Process):
     inherits from Process class
     """
 
-    def __init__(self, env, manager=None, logger=None):
-        super().__init__("Proc_Inspect", env, logger)
+    def __init__(self, env, manager=None, logger=None, manager_validation_logger=None, process_validation_logger=None):
+        super().__init__("Proc_Inspect", env, logger, manager_validation_logger, process_validation_logger)
 
         self.manager = manager
 
