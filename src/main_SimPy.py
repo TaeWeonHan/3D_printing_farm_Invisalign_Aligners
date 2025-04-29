@@ -17,14 +17,13 @@ def run_simulation(sim_duration=SIM_TIME):
     # Create logger with env
     logger = Logger(env)
 
-    # Create Customer validation logger with env
-    customer_validation_logger = ValidationLogger(env, "customer")
+    # logger type
+    logger_types = ["customer", "manager", "process"]
 
-    # Create managervalidation logger with env
-    manager_validation_logger = ValidationLogger(env, "manager")
-
-    # Create Process validation logger with env
-    process_validation_logger = ValidationLogger(env, "process")
+    # ValidationLogger
+    customer_validation_logger, manager_validation_logger, process_validation_logger = [
+        ValidationLogger(env, t) for t in logger_types
+    ]
 
     # Create manager and provide logger
     manager = Manager(env, logger, manager_validation_logger, process_validation_logger)

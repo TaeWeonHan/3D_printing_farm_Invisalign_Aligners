@@ -12,8 +12,8 @@ DETAILED_STATS_ENABLED = True  # Detailed statistics display flag
 
 # Validation settings flags
 CUSTOMER_EVENT_LOGGING = False  # Customer event logging enable/disable flag
-MANAGER_EVENT_LOGGING = True  # Manager event logging enable/disable flag
-PROCESS_EVENT_LOGGING = False  # Process event logging enable/disable flag
+MANAGER_EVENT_LOGGING = False  # Manager event logging enable/disable flag
+PROCESS_EVENT_LOGGING = True  # Process event logging enable/disable flag
 
 # Visualization flags
 GANTT_CHART_ENABLED = True  # Gantt chart visualization enable/disable flag
@@ -62,7 +62,7 @@ POLICY_ORDER_TO_JOB = "MAX_PER_JOB"
 
 
 def NUM_PATIENTS_PER_ORDER(): return random.randint(
-    2, 2)
+    3, 3)
 
 # Number of items per patient
 
@@ -72,6 +72,6 @@ def NUM_ITEMS_PER_PATIENT(): return random.randint(
 
 
 # Customer settings
-CUST_ORDER_CYCLE = 4 * 24 * 60  # Customer order cycle (1 week in minutes)
+CUST_ORDER_CYCLE = 7 * 24 * 60  # Customer order cycle (1 week in minutes)
 # Order settings
 ORDER_DUE_DATE = 7 * 24 * 60  # Order due date (1 week in minutes)

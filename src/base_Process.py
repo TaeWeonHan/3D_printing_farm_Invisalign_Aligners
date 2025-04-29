@@ -148,8 +148,8 @@ class Process:
         available_processors = [
             res for res in self.processor_resources.values() if res.is_available]
 
-        # print(
-        #     f"[DEBUG] {self.name_process}: available processors={len(available_processors)}")
+        print(
+            f"[DEBUG] {self.name_process}: available processors={len(available_processors)}")
         # Debug: Print status of each resource
         # for res_id, res in self.processor_resources.items():
         #     print(
@@ -157,8 +157,8 @@ class Process:
 
         # If queue is empty or no available processors, stop
         if self.job_store.is_empty or not available_processors:
-            # print(
-            #     f"[DEBUG] {self.name_process}: job allocation stopped - queue empty={self.job_store.is_empty}, no processors={not available_processors}")
+            print(
+                f"[DEBUG] {self.name_process}: job allocation stopped - queue empty={self.job_store.is_empty}, no processors={not available_processors}")
             return
 
         # List of jobs assigned to each processor
@@ -176,11 +176,11 @@ class Process:
             try:
                 for i in range(min(remaining_capacity, self.job_store.size)):
                     if not self.job_store.is_empty:
-                        # print(
-                        #     f"[DEBUG] {self.name_process}: attempting to get job {i+1}")
+                        print(
+                            f"[DEBUG] {self.name_process}: attempting to get job {i+1}")
                         job = yield self.job_store.get()
-                        # print(
-                        #     f"[DEBUG] {self.name_process}: retrieved job {job.id_job}")
+                        print(
+                            f"[DEBUG] {self.name_process}: retrieved job {job.id_job}")
                         jobs_to_assign.append(job)
             except Exception as e:
                 # Continue if unable to get job from JobStore
@@ -188,8 +188,28 @@ class Process:
 
             # Assign jobs to processor
             if jobs_to_assign:
+                # —— Validation: 할당된 프로세서와 잡 ID 목록 로깅
+                if self.process_validation_logger:
+                    job_ids = [job.id_job for job in jobs_to_assign]
+                    self.process_validation_logger.log_event(
+                        "SeizeValidation",
+                        f"{self.name_process}: Processor {processor_resource.name} "
+                        f"(ID={processor_resource.id}, cap={processor_resource.capacity}) "
+                        f"-> assigned jobs {job_ids}"
+                    )
                 processor_assignments.append(
                     (processor_resource, jobs_to_assign))
+                # —— Validation: 전체 processor_assignments 상태 로깅/출력
+                assignments_summary = [
+                    (pr.name, [j.id_job for j in js])
+                    for pr, js in processor_assignments
+                ]
+                # 1) 로그로 남기기
+                if self.process_validation_logger:
+                    self.process_validation_logger.log_event(
+                        "SeizeValidation",
+                        f"{self.name_process}: current assignments -> {assignments_summary}"
+                    )
                 # yield self.env.process(self.delay_resources(processor_resource, jobs_to_assign))
 
         # Process jobs with assigned processors in parallel
