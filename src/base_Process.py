@@ -176,11 +176,13 @@ class Process:
             try:
                 for i in range(min(remaining_capacity, self.job_store.size)):
                     if not self.job_store.is_empty:
-                        print(
-                            f"[DEBUG] {self.name_process}: attempting to get job {i+1}")
+                        
+                        # print(f"[DEBUG] {self.name_process}: attempting to get Capacity {i+1}")
+                        
                         job = yield self.job_store.get()
-                        print(
-                            f"[DEBUG] {self.name_process}: retrieved job {job.id_job}")
+                        
+                        # print(f"[DEBUG] {self.name_process}: retrieved job {job.id_job}")
+
                         jobs_to_assign.append(job)
             except Exception as e:
                 # Continue if unable to get job from JobStore
@@ -188,7 +190,7 @@ class Process:
 
             # Assign jobs to processor
             if jobs_to_assign:
-                # —— Validation: 할당된 프로세서와 잡 ID 목록 로깅
+                # —— Validation: Logging the list of assigned processors and job IDs
                 if self.process_validation_logger:
                     job_ids = [job.id_job for job in jobs_to_assign]
                     self.process_validation_logger.log_event(
@@ -199,12 +201,12 @@ class Process:
                     )
                 processor_assignments.append(
                     (processor_resource, jobs_to_assign))
-                # —— Validation: 전체 processor_assignments 상태 로깅/출력
+                # —— Validation: Full processor_assignments status logging/output
                 assignments_summary = [
                     (pr.name, [j.id_job for j in js])
                     for pr, js in processor_assignments
                 ]
-                # 1) 로그로 남기기
+                # 1) Leave it as a log
                 if self.process_validation_logger:
                     self.process_validation_logger.log_event(
                         "SeizeValidation",
@@ -238,7 +240,7 @@ class Process:
 
             # Record job start time
             job.time_processing_start = self.env.now
-
+            
             # Record job processing history
             process_step = self.create_process_step(job, processor_resource)
             if not hasattr(job, 'processing_history'):
@@ -251,6 +253,7 @@ class Process:
 
         # Calculate and wait for processing time
         processing_time = processor_resource.processing_time
+
         yield self.env.timeout(processing_time)
 
         # Special processing (if needed)
@@ -274,7 +277,11 @@ class Process:
             if self.logger:
                 self.logger.log_event(
                     "Processing", f"Completed processing job {job.id_job} on {processor_resource.name}")
-
+            
+            if self.process_validation_logger:
+                self.process_validation_logger.log_event(
+                    "Processing", f"Completed processing job {job.id_job} on {processor_resource.name}"
+                )
             # Send job to next process
             self.send_job_to_next(job)
 
@@ -322,6 +329,13 @@ class Process:
             if self.logger:
                 self.logger.log_event(
                     "Process Flow", f"Moving job {job.id_job} from {self.name_process} to {self.next_process.name_process}")
+            
+            # validation code
+            if self.process_validation_logger:
+                self.process_validation_logger.log_event(
+                    "Process Flow", f"Moving job {job.id_job} from {self.name_process} to {self.next_process.name_process}"
+                )
+
             # Add job to next process queue
             self.next_process.add_to_queue(job)
             return True
@@ -330,4 +344,11 @@ class Process:
             if self.logger:
                 self.logger.log_event(
                     "Process Flow", f"Job {job.id_job} completed at {self.name_process} (final process)")
+
+            # validation code    
+            if self.process_validation_logger:
+                self.process_validation_logger.log_event(
+                    "Process Flow", f"Job {job.id_job} completed at {self.name_process} (final process)"
+                )
+
             return False
