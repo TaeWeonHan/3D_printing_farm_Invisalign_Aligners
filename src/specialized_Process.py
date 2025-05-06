@@ -19,12 +19,48 @@ class Proc_Build(Process):
 
     def apply_special_processing(self, processor, jobs):
         """3D Printing special processing - possibility of defects"""
-        for job in jobs:
+        
+        """for job in jobs:
             for item in job.list_items:
                 if random.random() < DEFECT_RATE_PROC_BUILD:
                     item.is_defect = True
                 else:
                     item.is_defect = False
+        return True"""
+    
+        # validation
+        for job in jobs:
+            count = 0
+
+            # job IDand item list logging
+            if self.manager_validation_logger:
+                self.manager_validation_logger.log_event(
+                    "SpecialProcessing",
+                    f"job id: {job.id_job}"
+                )
+                self.manager_validation_logger.log_event(
+                    "SpecialProcessing",
+                    f"job items: {[item.id_item for item in job.list_items]}"
+                )
+            
+            for item in job.list_items:
+                count += 1
+                if count % 3 == 0:
+                    item.is_defect = True
+                else:
+                    item.is_defect = False
+
+            # merging item list logging
+            if self.manager_validation_logger:
+                self.manager_validation_logger.log_event(
+                    "SpecialProcessing",
+                    f"job id: {job.id_job}"
+                )
+                self.manager_validation_logger.log_event(
+                    "SpecialProcessing",
+                    f"defective job items: {[item.id_item for item in job.list_items if item.is_defect]}"
+                )
+
         return True
 
 
@@ -96,6 +132,11 @@ class Proc_Inspect(Process):
 
                     if self.logger:
                         self.logger.log_event(
+                            "Inspection", f"Found {len(defective_items)} defective items in job {job.id_job}")
+
+                    # validation    
+                    if self.manager_validation_logger:
+                        self.manager_validation_logger.log_event(
                             "Inspection", f"Found {len(defective_items)} defective items in job {job.id_job}")
 
                     # Check if enough defective items to create a new job

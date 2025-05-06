@@ -278,9 +278,10 @@ class Process:
                 self.logger.log_event(
                     "Processing", f"Completed processing job {job.id_job} on {processor_resource.name}")
             
+            # Validation
             if self.process_validation_logger:
                 self.process_validation_logger.log_event(
-                    "Processing", f"Completed processing job {job.id_job} on {processor_resource.name}"
+                    "DelayValidation", f"Processing: Completed processing job {job.id_job} on {processor_resource.name}"
                 )
             # Send job to next process
             self.send_job_to_next(job)
@@ -299,14 +300,37 @@ class Process:
         """
         # Release processor resource
         processor_resource.release(request)
-        processor_resource.finish_jobs()
+        processor_resource.finish_jobs() 
+
+        # Validation
+        if self.process_validation_logger:
+            current_jobs_snapshot = getattr(processor_resource, 'current_jobs', None)
+            self.process_validation_logger.log_event(
+                "ReleaseValidation",
+                f"current_jobs={current_jobs_snapshot}, "
+            )
 
         # Trigger resource release event (for event-based approach)
         if hasattr(self, 'resource_trigger'):
             self.resource_trigger.succeed()
+
+            # validation log: record succeed moment
+            if self.process_validation_logger:
+                self.process_validation_logger.log_event(
+                    "ReleaseValidation",
+                    f"[{self.env.now}] {self.name_process}: resource_trigger succeeded"
+                )
+                
             # Create new trigger immediately
             self.resource_trigger = self.env.event()
-
+            
+            # validation log: record reset moment
+            if self.process_validation_logger:
+                self.process_validation_logger.log_event(
+                    "ReleaseValidation",
+                    f"[{self.env.now}] {self.name_process}: resource_trigger reset"
+                )
+                
         if self.logger:
             self.logger.log_event(
                 "Resource", f"Released {processor_resource.name} in {self.name_process}")
@@ -333,7 +357,7 @@ class Process:
             # validation code
             if self.process_validation_logger:
                 self.process_validation_logger.log_event(
-                    "Process Flow", f"Moving job {job.id_job} from {self.name_process} to {self.next_process.name_process}"
+                    "DelayValidation", f"Process Flow: Moving job {job.id_job} from {self.name_process} to {self.next_process.name_process}"
                 )
 
             # Add job to next process queue
@@ -348,7 +372,7 @@ class Process:
             # validation code    
             if self.process_validation_logger:
                 self.process_validation_logger.log_event(
-                    "Process Flow", f"Job {job.id_job} completed at {self.name_process} (final process)"
+                    "DelayValidation", f"Process Flow: Job {job.id_job} completed at {self.name_process} (final process)"
                 )
 
             return False

@@ -12,8 +12,11 @@ DETAILED_STATS_ENABLED = True  # Detailed statistics display flag
 
 # Validation settings flags
 CUSTOMER_EVENT_LOGGING = False  # Customer event logging enable/disable flag
-MANAGER_EVENT_LOGGING = False  # Manager event logging enable/disable flag
-PROCESS_EVENT_LOGGING = True  # Process event logging enable/disable flag
+MANAGER_EVENT_LOGGING = True  # Manager event logging enable/disable flag
+PROCESS_EVENT_LOGGING = False  # Process event logging enable/disable flag
+
+# logger type
+LOGGER_TYPES = ["CUSTOMER", "MANAGER", "PROCESS"]
 
 # Visualization flags
 GANTT_CHART_ENABLED = True  # Gantt chart visualization enable/disable flag
@@ -47,7 +50,7 @@ NUM_WORKERS_IN_INSPECT = 5  # Number of workers in inspection process
 
 """ Policy settings """
 # Number of defective items to collect for rework
-POLICY_NUM_DEFECT_PER_JOB = 10
+POLICY_NUM_DEFECT_PER_JOB = 3
 # Policy for placing rework jobs in queue
 POLICY_REPROC_SEQ_IN_QUEUE = "QUEUE_LAST"
 # Policy for extracting jobs from queue
