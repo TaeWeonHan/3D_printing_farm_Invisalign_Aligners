@@ -26,9 +26,11 @@ class Job:
         self.time_waiting_start = None
         self.time_waiting_end = None
         self.is_reprocess = False  # Flag for reprocessed jobs
+        self.num_items = len(self.list_items) # Set Num of items in job
 
-        # Add processing history to track jobs across all processes
+        # Add processing history to track jobs across all processes and waiting
         self.processing_history = []  # Will store each process step details
+        self.waiting_history = []  # Will store each waiting step details
 
 
 class JobStore(simpy.Store):

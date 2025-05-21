@@ -3,15 +3,14 @@ from config_SimPy import *
 from base_Process import Process
 from specialized_Processor import Mach_3DPrint, Mach_Wash, Mach_Dry, Worker_Inspect
 
-
 class Proc_Build(Process):
     """
     3D Printing Process
     inherits from Process class  
     """
 
-    def __init__(self, env, logger=None, manager_validation_logger=None, process_validation_logger=None):
-        super().__init__("Proc_Build", env, logger, manager_validation_logger, process_validation_logger)
+    def __init__(self, env, logger=None):
+        super().__init__("Proc_Build", env, logger)
 
         # Initialize 3D printing machines
         for i in range(NUM_MACHINES_BUILD):
@@ -19,48 +18,12 @@ class Proc_Build(Process):
 
     def apply_special_processing(self, processor, jobs):
         """3D Printing special processing - possibility of defects"""
-        
-        """for job in jobs:
+        for job in jobs:
             for item in job.list_items:
                 if random.random() < DEFECT_RATE_PROC_BUILD:
                     item.is_defect = True
                 else:
                     item.is_defect = False
-        return True"""
-    
-        # validation
-        for job in jobs:
-            count = 0
-
-            # job IDand item list logging
-            if self.manager_validation_logger:
-                self.manager_validation_logger.log_event(
-                    "SpecialProcessing",
-                    f"job id: {job.id_job}"
-                )
-                self.manager_validation_logger.log_event(
-                    "SpecialProcessing",
-                    f"job items: {[item.id_item for item in job.list_items]}"
-                )
-            
-            for item in job.list_items:
-                count += 1
-                if count % 3 == 0:
-                    item.is_defect = True
-                else:
-                    item.is_defect = False
-
-            # merging item list logging
-            if self.manager_validation_logger:
-                self.manager_validation_logger.log_event(
-                    "SpecialProcessing",
-                    f"job id: {job.id_job}"
-                )
-                self.manager_validation_logger.log_event(
-                    "SpecialProcessing",
-                    f"defective job items: {[item.id_item for item in job.list_items if item.is_defect]}"
-                )
-
         return True
 
 
@@ -70,8 +33,8 @@ class Proc_Wash(Process):
     inherits from Process class   
     """
 
-    def __init__(self, env, logger=None, manager_validation_logger=None, process_validation_logger=None):
-        super().__init__("Proc_Wash", env, logger, manager_validation_logger, process_validation_logger)
+    def __init__(self, env, logger=None):
+        super().__init__("Proc_Wash", env, logger)
 
         # Initialize wash machines
         for i in range(NUM_MACHINES_WASH):
@@ -84,8 +47,8 @@ class Proc_Dry(Process):
     inherits from Process class
     """
 
-    def __init__(self, env, logger=None, manager_validation_logger=None, process_validation_logger=None):
-        super().__init__("Proc_Dry", env, logger, manager_validation_logger, process_validation_logger)
+    def __init__(self, env, logger=None):
+        super().__init__("Proc_Dry", env, logger)
 
         # Initialize dry machines
         for i in range(NUM_MACHINES_DRY):
@@ -98,8 +61,8 @@ class Proc_Inspect(Process):
     inherits from Process class
     """
 
-    def __init__(self, env, manager=None, logger=None, manager_validation_logger=None, process_validation_logger=None):
-        super().__init__("Proc_Inspect", env, logger, manager_validation_logger, process_validation_logger)
+    def __init__(self, env, manager=None, logger=None):
+        super().__init__("Proc_Inspect", env, logger)
 
         self.manager = manager
 
@@ -124,6 +87,9 @@ class Proc_Inspect(Process):
                     else:
                         # Mark normal items as completed
                         item.is_completed = True
+                        
+                        # Check if all items for this patient are completed
+                        self.manager.check_orders_completed(item)
 
                 # Process defective items
                 if defective_items:
@@ -132,11 +98,6 @@ class Proc_Inspect(Process):
 
                     if self.logger:
                         self.logger.log_event(
-                            "Inspection", f"Found {len(defective_items)} defective items in job {job.id_job}")
-
-                    # validation    
-                    if self.manager_validation_logger:
-                        self.manager_validation_logger.log_event(
                             "Inspection", f"Found {len(defective_items)} defective items in job {job.id_job}")
 
                     # Check if enough defective items to create a new job

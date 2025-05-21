@@ -7,16 +7,8 @@ import random
 SIM_TIME = 7 * 24 * 60  # (unit: minutes)
 
 # Logging and visualization settings
-EVENT_LOGGING = False  # Event logging enable/disable flag
+EVENT_LOGGING = True  # Event logging enable/disable flag
 DETAILED_STATS_ENABLED = True  # Detailed statistics display flag
-
-# Validation settings flags
-CUSTOMER_EVENT_LOGGING = False  # Customer event logging enable/disable flag
-MANAGER_EVENT_LOGGING = True  # Manager event logging enable/disable flag
-PROCESS_EVENT_LOGGING = False  # Process event logging enable/disable flag
-
-# logger type
-LOGGER_TYPES = ["CUSTOMER", "MANAGER", "PROCESS"]
 
 # Visualization flags
 GANTT_CHART_ENABLED = True  # Gantt chart visualization enable/disable flag
@@ -33,7 +25,16 @@ PALLET_SIZE_LIMIT = 50
 PROC_TIME_BUILD = 180  # Process time for build (unit: minutes)
 PROC_TIME_WASH = 120  # Process time for wash (unit: minutes)
 PROC_TIME_DRY = 120  # Process time for dry (unit: minutes)
-PROC_TIME_INSPECT = 120  # Process time for inspect per item (unit: minutes)
+PROC_TIME_INSPECT = 0  # Process time for inspect per item (unit: minutes)
+
+# Unit Processing time (in minutes)
+UNIT_PROC_TIME = 10
+
+# Machines and workers processing time correlation
+BUILD_CORRELATION = 1
+WASH_CORRELATION = 1
+DRY_CORRELATION = 1
+INSPECT_CORRELATION = 1
 
 # Machine settings
 NUM_MACHINES_BUILD = 3  # Number of 3D print machines
@@ -50,7 +51,7 @@ NUM_WORKERS_IN_INSPECT = 5  # Number of workers in inspection process
 
 """ Policy settings """
 # Number of defective items to collect for rework
-POLICY_NUM_DEFECT_PER_JOB = 3
+POLICY_NUM_DEFECT_PER_JOB = 10
 # Policy for placing rework jobs in queue
 POLICY_REPROC_SEQ_IN_QUEUE = "QUEUE_LAST"
 # Policy for extracting jobs from queue
@@ -65,7 +66,7 @@ POLICY_ORDER_TO_JOB = "MAX_PER_JOB"
 
 
 def NUM_PATIENTS_PER_ORDER(): return random.randint(
-    3, 3)
+    5, 5)
 
 # Number of items per patient
 

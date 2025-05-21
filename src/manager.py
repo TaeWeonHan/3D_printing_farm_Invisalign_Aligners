@@ -11,16 +11,15 @@ class Manager(OrderReceiver):
     Attributes:
         env (simpy.Environment): Simulation environment
         logger (Logger): Logger object for logging events
-        manager_validation_logger (Logger): Logger object for logging validation events
         next_job_id (int): Next job ID counter
         completed_orders (list): List of completed orders 
+        processed_orders (list): List of processed orders
+        processed_patients (list): List of processed patients
     """
 
-    def __init__(self, env, logger=None, manager_validation_logger=None, process_validation_logger=None):
+    def __init__(self, env, logger=None):
         self.env = env
         self.logger = logger
-        self.manager_validation_logger = manager_validation_logger
-        self.process_validation_logger = process_validation_logger
 
         # Next job ID counter
         self.next_job_id = 1
@@ -28,22 +27,28 @@ class Manager(OrderReceiver):
         # Tracking completed jobs and orders
         self.completed_orders = []
 
+        # Tracking processed jobs and orders
+        self.processed_orders = []
+
+        # Tracking processed patients
+        self.processed_patients = []
+
         # When calling setup_processes, the manager (self) itself is also passed as an argument
         self.setup_processes(manager=self)
 
     def setup_processes(self, manager=None):
         """Create and connect all manufacturing processes"""
         # Create processes
-        self.proc_build = Proc_Build(self.env, self.logger, self.manager_validation_logger, self.process_validation_logger)
-        self.proc_wash = Proc_Wash(self.env, self.logger, self.manager_validation_logger, self.process_validation_logger)
-        self.proc_dry = Proc_Dry(self.env, self.logger, self.manager_validation_logger, self.process_validation_logger)
-        self.proc_inspect = Proc_Inspect(self.env, manager, self.logger, self.manager_validation_logger, self.process_validation_logger)
+        self.proc_build = Proc_Build(self.env, self.logger)
+        self.proc_wash = Proc_Wash(self.env, self.logger)
+        self.proc_dry = Proc_Dry(self.env, self.logger)
+        self.proc_inspect = Proc_Inspect(self.env, manager, self.logger)
 
         # Connect processes
         self.proc_build.connect_to_next_process(self.proc_wash)
         self.proc_wash.connect_to_next_process(self.proc_dry)
         self.proc_dry.connect_to_next_process(self.proc_inspect)
-        
+
         if self.logger:
             self.logger.log_event(
                 "Manager", "Manufacturing processes created and connected")
@@ -52,18 +57,16 @@ class Manager(OrderReceiver):
         """Process incoming order from Customer"""
         if self.logger:
             self.logger.log_event(
-                "Order", f"Received Order {order.id_order} with {order.num_patients} patients")
+                "Order", f"Received Order {order.id_order} for Customer {order.id_customer} with {order.num_patients} patients")
 
-        # Validation code
-        # if self.manager_validation_logger:
-        #     patient_details_str = "\n".join(
-        #        f"    Patient ID: {patient.id_patient}\n" +
-        #        "\n".join(f"        Item ID: {item.id_item}" for item in patient.list_items) for patient in order.list_patients)
-        #     self.manager_validation_logger.log_event(
-        #             "Order", f"Received Order {order.id_order} with {order.num_patients} patients and their items:\n{patient_details_str}")
-
-        # Mark order start time
+        # Mark order start time and record number of patients and total items
         order.time_start = self.env.now
+
+        # Add patients to processed list
+        self.processed_patients += order.list_patients
+
+        # Add order to processed orders list
+        self.processed_orders.append(order)
 
         # Convert order to jobs based on policy
         self.create_jobs_for_proc_build(order)
@@ -87,10 +90,6 @@ class Manager(OrderReceiver):
                 if self.logger:
                     self.logger.log_event(
                         "Manager", f"Created job {job.id_job} for patient {patient.id_patient} with {len(patient_items)} items")
-                
-                # Validation code
-                print("Manager", f"Created job {job.id_job} for patient {patient.id_patient} with {len(patient_items)} items")
-                
                 self.proc_build.add_to_queue(job)
             else:
                 # Patient's items exceed PALLET_SIZE_LIMIT, apply splitting policy
@@ -106,9 +105,6 @@ class Manager(OrderReceiver):
                         if self.logger:
                             self.logger.log_event(
                                 "Manager", f"Created job {job.id_job} for patient {patient.id_patient} with {len(job_items)} items (split job)")
-                            
-                        # Validation code
-                        # print("Manager", f"Created job {job.id_job} for patient {patient.id_patient} with {len(job_items)} items (split job)")
                         self.proc_build.add_to_queue(job)
 
                 # Additional policies can be implemented here if needed
@@ -148,13 +144,54 @@ class Manager(OrderReceiver):
                         "Manager", f"Created rework job {job.id_job} with {len(items_for_job)} defective items (added to end of queue)")
                     self.logger.log_event(
                         "Manager", f"Remaining defective items: {len(self.proc_inspect.defective_items)}")
+                    
+    def check_orders_completed(self, item):
+        """Check if an order has been fully completed based on the given item."""
 
-                # Validation    
-                if self.manager_validation_logger:
-                    self.manager_validation_logger.log_event(
-                        "Manager", f"Created rework job {job.id_job} with {len(items_for_job)} defective items (added to end of queue)")
-                    self.manager_validation_logger.log_event(
-                        "Manager", f"Remaining defective items: {len(self.proc_inspect.defective_items)}")
+        # 1) Find the corresponding Patient object by matching customer, order, and patient IDs
+        patient = next(
+            (p for p in self.processed_patients
+            if p.id_customer == item.id_customer
+            and p.id_order    == item.id_order
+            and p.id_patient  == item.id_patient),
+            None
+        )
+        if patient is None:
+            # If no matching patient is found, exit early
+            return
+
+        # 2) Verify that this patient has completed all of their items
+        if not patient.check_completion():
+            # If the patient is not yet fully completed, exit early
+            return
+
+        # 3) Find the corresponding Order object by matching customer and order IDs
+        order = next(
+            (o for o in self.processed_orders
+            if o.id_customer == item.id_customer
+            and o.id_order    == item.id_order),
+            None
+        )
+        if order is None:
+            # If no matching order is found, exit early
+            return
+
+        # 4) Check if the order is fully completed and hasn't been recorded yet
+        if order.check_completion() and order not in self.completed_orders:
+            # Record completion time and compute makespan
+            order.time_end = self.env.now
+            order.makespan = order.time_end - order.time_start
+
+            # Add the order to the list of completed orders
+            self.completed_orders.append(order)
+
+            # Optionally log the completion event
+            if self.logger:
+                self.logger.log_event(
+                    "Order",
+                    f"Order {order.id_order} (Customer {order.id_customer}) "
+                    f"completed at {order.time_end:.0f}, makespan: {order.makespan:.0f} min"
+                )    
 
     def get_processes(self):
         """Return processes as a dictionary for statistics collection"""

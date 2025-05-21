@@ -3,8 +3,9 @@ import simpy
 import random
 from base_Customer import Customer
 from manager import Manager
-from log_SimPy import Logger, ValidationLogger
+from log_SimPy import Logger
 from config_SimPy import *
+from base_Job import Job
 
 
 def run_simulation(sim_duration=SIM_TIME):
@@ -17,16 +18,11 @@ def run_simulation(sim_duration=SIM_TIME):
     # Create logger with env
     logger = Logger(env)
 
-    # ValidationLogger
-    customer_validation_logger, manager_validation_logger, process_validation_logger = [
-        ValidationLogger(env, t) for t in LOGGER_TYPES
-    ]
-
     # Create manager and provide logger
-    manager = Manager(env, logger, manager_validation_logger, process_validation_logger)
+    manager = Manager(env, logger)
 
     # Create customer to generate orders
-    Customer(env, manager, logger, customer_validation_logger)
+    Customer(env, manager, logger)
 
     # Run simulation
     print("\nStarting simulation...")
@@ -35,6 +31,48 @@ def run_simulation(sim_duration=SIM_TIME):
     # Run simulation
     env.run(until=sim_duration)
 
+    # ─── 디버깅용: waiting_history 출력 ───
+    print("\n=== Debug: Waiting History per Job ===")
+    # 1) 모든 프로세스 가져오기
+    processes = manager.get_processes()                            # :contentReference[oaicite:0]{index=0}
+    # 2) completed_jobs 집계 (중복 제거)
+    all_jobs = []
+    for proc in processes.values():
+        all_jobs.extend(proc.completed_jobs)
+    unique_jobs = {job.id_job: job for job in all_jobs}.values()
+
+    # 3) 각 job의 waiting_history 출력
+    for job in sorted(unique_jobs, key=lambda j: j.id_job):
+        print(f"\nJob {job.id_job} waiting steps:")
+        # waiting_history 는 dict 리스트: {'process','start_time','end_time','duration'}
+        for step in getattr(job, 'waiting_history', []):
+            proc = step.get('process')
+            start = step.get('start_time')
+            end   = step.get('end_time')
+            dur   = step.get('duration')
+            print(f"  - {proc}: start={start:.1f}, end={end:.1f}, dur={dur:.1f}")
+    print("=== End Debug ===\n")
+    print("\n=== Debug: Processing History per Job ===")
+    # 1) 모든 프로세스 가져오기
+    processes = manager.get_processes()                            # :contentReference[oaicite:0]{index=0}
+    # 2) completed_jobs 집계 (중복 제거)
+    all_jobs = []
+    for proc in processes.values():
+        all_jobs.extend(proc.completed_jobs)
+    unique_jobs = {job.id_job: job for job in all_jobs}.values()
+
+    # 3) 각 job의 waiting_history 출력
+    for job in sorted(unique_jobs, key=lambda j: j.id_job):
+        print(f"\nJob {job.id_job} processing steps:")
+        # waiting_history 는 dict 리스트: {'process','start_time','end_time','duration'}
+        for step in getattr(job, 'processing_history', []):
+            proc = step.get('process')
+            start = step.get('start_time')
+            end   = step.get('end_time')
+            dur   = step.get('duration')
+            print(f"  - {proc}: start={start:.1f}, end={end:.1f}, dur={dur:.1f}")
+    print("=== End Debug ===\n")
+    
     # Collect and display results
     print("\n================ Simulation Results ================")
 
@@ -61,7 +99,11 @@ def run_simulation(sim_duration=SIM_TIME):
     if DETAILED_STATS_ENABLED or GANTT_CHART_ENABLED or VIS_STAT_ENABLED:
         print("\nCollecting detailed statistics...")
         processes = manager.get_processes()
-        stats = logger.collect_statistics(processes)
+        stats = logger.collect_statistics(processes, manager.completed_orders)
+
+        print("\n=== Detailed Statistics ===")
+        for key, val in stats.items():
+            print(f"  {key}: {val:.3f}" if isinstance(val, float) else f"  {key}: {val}")
 
         # Visualize results if enabled
         if GANTT_CHART_ENABLED or VIS_STAT_ENABLED:

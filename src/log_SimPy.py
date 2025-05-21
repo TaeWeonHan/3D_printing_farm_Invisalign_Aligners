@@ -6,26 +6,6 @@ from datetime import datetime, timedelta
 import numpy as np
 from config_SimPy import *
 
-class ValidationLogger:
-    def __init__(self, env, logger_type):
-        self.env = env
-        self.logger_type = logger_type.lower()
-
-    def log_event(self, event_type, message):
-        current_time = self.env.now
-        days = int(current_time // (24 * 60))
-        hours = int((current_time % (24 * 60)) // 60)
-        minutes = int(current_time % 60)
-        timestamp = f"{days:02d}:{hours:02d}:{minutes:02d}"
-        total_minutes = int(current_time)
-
-        # 역할에 따라 해당 플래그만 체크합니다.
-        if self.logger_type == "manager" and MANAGER_EVENT_LOGGING:
-            print(f"[{timestamp}] [{total_minutes}] | {event_type}: {message}")
-        elif self.logger_type == "customer" and CUSTOMER_EVENT_LOGGING:
-            print(f"[{timestamp}] [{total_minutes}] | {event_type}: {message}")
-        elif self.logger_type == "process" and PROCESS_EVENT_LOGGING:
-            print(f"[{timestamp}] [{total_minutes}] | {event_type}: {message}")
 
 class Logger:
     def __init__(self, env):
@@ -47,7 +27,7 @@ class Logger:
             # 나중에 분석을 위해 로그 저장
             self.event_logs.append((current_time, event_type, message))
 
-    def collect_statistics(self, processes):
+    def collect_statistics(self, processes, completed_orders=None):
         """Collect statistics from the simulation
 
         Args:
@@ -88,17 +68,19 @@ class Logger:
         process_jobs = {proc_id: [] for proc_id in process_ids}
 
         for job in completed_jobs:
-            process_id = job.workstation.get('Process')
-            if process_id in process_jobs:
-                process_jobs[process_id].append(job)
+            for proc_id in getattr(job, 'process_sequence', []):
+                if proc_id in process_jobs:
+                    process_jobs[proc_id].append(job)
 
         # Analyze waiting and processing times
         for process_id, jobs in process_jobs.items():
             if jobs:
                 # Waiting time statistics
-                waiting_times = [(job.time_waiting_end - job.time_waiting_start)
-                                 for job in jobs
-                                 if job.time_waiting_end is not None and job.time_waiting_start is not None]
+                waiting_times = []
+                for job in jobs:
+                    for step in getattr(job, 'waiting_history', []):
+                        if step['process'] == process_id and step['duration'] is not None:
+                            waiting_times.append(step['duration'])
 
                 if waiting_times:
                     stats[f'{process_id}_waiting_time_avg'] = sum(
@@ -107,9 +89,11 @@ class Logger:
                         waiting_times) if len(waiting_times) > 1 else 0
 
                 # Processing time statistics
-                processing_times = [(job.time_processing_end - job.time_processing_start)
-                                    for job in jobs
-                                    if job.time_processing_end is not None and job.time_processing_start is not None]
+                processing_times = []
+                for job in jobs:
+                    for step in getattr(job, 'processing_history', []):
+                        if step['process'] == process_id and step['duration'] is not None:
+                            processing_times.append(step['duration'])
 
                 if processing_times:
                     stats[f'{process_id}_processing_time_avg'] = sum(
@@ -144,6 +128,12 @@ class Logger:
         # Count defective items if inspection process exists
         if proc_inspect and hasattr(proc_inspect, 'defective_items'):
             stats['total_defects'] = len(proc_inspect.defective_items)
+
+        # ───── avg order makespan statistics ─────
+        if completed_orders:
+            makespans = [order.makespan for order in completed_orders]
+            stats['order_makespan_avg'] = sum(makespans) / len(makespans)
+            stats['order_makespan_std'] = np.std(makespans) if len(makespans) > 1 else 0
 
         return stats
 

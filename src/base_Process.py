@@ -1,6 +1,6 @@
 from base_Job import JobStore
 from base_Processor import ProcessorResource
-
+from cal_ProcessingTime import calculate_processing_time
 
 class Process:
     """
@@ -20,12 +20,10 @@ class Process:
         process (simpy.Process): Main process execution
     """
 
-    def __init__(self, name_process, env, logger=None, manager_validation_logger=None, process_validation_logger=None):
+    def __init__(self, name_process, env, logger=None):
         self.name_process = name_process
         self.env = env
         self.logger = logger
-        self.manager_validation_logger = manager_validation_logger
-        self.process_validation_logger = process_validation_logger
         self.list_processors = []  # Processor list
 
         # Implement queue with JobStore (Inherits SimPy Store)
@@ -57,11 +55,6 @@ class Process:
         # if self.logger:
         #     self.logger.log_event(
         #         "Process", f"Process {self.name_process} connected to {next_process.name_process}")
-        
-        # validation
-        if self.manager_validation_logger:
-            self.manager_validation_logger.log_event(
-                "Process", f"Process {self.name_process} connected to {next_process.name_process}")
 
     def register_processor(self, processor):
         """Register processor (Machine or Worker). Used for process initialization."""
@@ -83,21 +76,20 @@ class Process:
         # if self.logger:
         #     self.logger.log_event(
         #         "Resource", f"Registered {processor.type_processor} {processor_name} to process {self.name_process}")
-        
-        # validation
-        if processor_resource.processor_type == "Machine":
-            if self.manager_validation_logger:
-                self.manager_validation_logger.log_event(
-                    "Resource", f"Registered {processor_resource.name} | Capacity {processor_resource.capacity} | Processing time {processor_resource.processing_time} | to process {self.name_process}")
-        else:
-            if self.manager_validation_logger:
-                self.manager_validation_logger.log_event(
-                    "Resource", f"Registered {processor_resource.name} | Processing time {processor_resource.processing_time} |to process {self.name_process}")
 
     def add_to_queue(self, job):
         """Add job to queue"""
         job.time_waiting_start = self.env.now
-        job.workstation["Process"] = self.name_process
+        
+        if not hasattr(job, 'process_sequence'):
+            job.process_sequence = []
+        job.process_sequence.append(self.name_process)
+
+        # Record job waiting history
+        process_step = self.create_waiting_step(job)
+        if not hasattr(job, 'waiting_history'):
+            job.waiting_history = []
+        job.waiting_history.append(process_step)        
 
         # Add job to JobStore
         self.job_store.put(job)
@@ -109,11 +101,6 @@ class Process:
 
         if self.logger:
             self.logger.log_event(
-                "Queue", f"Added job {job.id_job} to {self.name_process} queue. Queue length: {self.job_store.size}")
-            
-        # validation
-        if self.manager_validation_logger:
-            self.manager_validation_logger.log_event(
                 "Queue", f"Added job {job.id_job} to {self.name_process} queue. Queue length: {self.job_store.size}")
 
     def run(self):
@@ -148,8 +135,8 @@ class Process:
         available_processors = [
             res for res in self.processor_resources.values() if res.is_available]
 
-        print(
-            f"[DEBUG] {self.name_process}: available processors={len(available_processors)}")
+        # print(
+        #     f"[DEBUG] {self.name_process}: available processors={len(available_processors)}")
         # Debug: Print status of each resource
         # for res_id, res in self.processor_resources.items():
         #     print(
@@ -157,8 +144,8 @@ class Process:
 
         # If queue is empty or no available processors, stop
         if self.job_store.is_empty or not available_processors:
-            print(
-                f"[DEBUG] {self.name_process}: job allocation stopped - queue empty={self.job_store.is_empty}, no processors={not available_processors}")
+            # print(
+            #     f"[DEBUG] {self.name_process}: job allocation stopped - queue empty={self.job_store.is_empty}, no processors={not available_processors}")
             return
 
         # List of jobs assigned to each processor
@@ -176,13 +163,11 @@ class Process:
             try:
                 for i in range(min(remaining_capacity, self.job_store.size)):
                     if not self.job_store.is_empty:
-                        
-                        # print(f"[DEBUG] {self.name_process}: attempting to get Capacity {i+1}")
-                        
+                        # print(
+                        #     f"[DEBUG] {self.name_process}: attempting to get job {i+1}")
                         job = yield self.job_store.get()
-                        
-                        # print(f"[DEBUG] {self.name_process}: retrieved job {job.id_job}")
-
+                        # print(
+                        #     f"[DEBUG] {self.name_process}: retrieved job {job.id_job}")
                         jobs_to_assign.append(job)
             except Exception as e:
                 # Continue if unable to get job from JobStore
@@ -190,28 +175,8 @@ class Process:
 
             # Assign jobs to processor
             if jobs_to_assign:
-                # —— Validation: Logging the list of assigned processors and job IDs
-                if self.process_validation_logger:
-                    job_ids = [job.id_job for job in jobs_to_assign]
-                    self.process_validation_logger.log_event(
-                        "SeizeValidation",
-                        f"{self.name_process}: Processor {processor_resource.name} "
-                        f"(ID={processor_resource.id}, cap={processor_resource.capacity}) "
-                        f"-> assigned jobs {job_ids}"
-                    )
                 processor_assignments.append(
                     (processor_resource, jobs_to_assign))
-                # —— Validation: Full processor_assignments status logging/output
-                assignments_summary = [
-                    (pr.name, [j.id_job for j in js])
-                    for pr, js in processor_assignments
-                ]
-                # 1) Leave it as a log
-                if self.process_validation_logger:
-                    self.process_validation_logger.log_event(
-                        "SeizeValidation",
-                        f"{self.name_process}: current assignments -> {assignments_summary}"
-                    )
                 # yield self.env.process(self.delay_resources(processor_resource, jobs_to_assign))
 
         # Process jobs with assigned processors in parallel
@@ -231,6 +196,12 @@ class Process:
         for job in jobs:
             job.time_waiting_end = self.env.now
 
+            # Update job history
+            for step in job.waiting_history:
+                if step['process'] == self.name_process and step['end_time'] is None:
+                    step['end_time'] = self.env.now
+                    step['duration'] = self.env.now - step['start_time']
+
             # Register job with processor
             processor_resource.start_job(job)
 
@@ -240,7 +211,7 @@ class Process:
 
             # Record job start time
             job.time_processing_start = self.env.now
-            
+
             # Record job processing history
             process_step = self.create_process_step(job, processor_resource)
             if not hasattr(job, 'processing_history'):
@@ -251,10 +222,25 @@ class Process:
         request = processor_resource.request()
         yield request
 
-        # Calculate and wait for processing time
-        processing_time = processor_resource.processing_time
+        # Calculate and wait for dynamic processing time
+        dynamic_times = []
+        for job in jobs:
+            # Calculate beyond default processing time and process name
+            t = calculate_processing_time(
+                    job,
+                    self.name_process,
+                    processor_resource.processing_time
+                )
+            job.job_processing_time = t
+            dynamic_times.append(t)
 
-        yield self.env.timeout(processing_time)
+        if processor_resource.allows_job_addition_during_processing == False:
+            process_time = sum(dynamic_times)
+            yield self.env.timeout(process_time)
+
+        else:
+            for process_time in dynamic_times:
+                yield self.env.timeout(process_time)
 
         # Special processing (if needed)
         if hasattr(self, 'apply_special_processing'):
@@ -277,12 +263,7 @@ class Process:
             if self.logger:
                 self.logger.log_event(
                     "Processing", f"Completed processing job {job.id_job} on {processor_resource.name}")
-            
-            # Validation
-            if self.process_validation_logger:
-                self.process_validation_logger.log_event(
-                    "DelayValidation", f"Processing: Completed processing job {job.id_job} on {processor_resource.name}"
-                )
+
             # Send job to next process
             self.send_job_to_next(job)
 
@@ -300,37 +281,14 @@ class Process:
         """
         # Release processor resource
         processor_resource.release(request)
-        processor_resource.finish_jobs() 
-
-        # Validation
-        if self.process_validation_logger:
-            current_jobs_snapshot = getattr(processor_resource, 'current_jobs', None)
-            self.process_validation_logger.log_event(
-                "ReleaseValidation",
-                f"current_jobs={current_jobs_snapshot}, "
-            )
+        processor_resource.finish_jobs()
 
         # Trigger resource release event (for event-based approach)
         if hasattr(self, 'resource_trigger'):
             self.resource_trigger.succeed()
-
-            # validation log: record succeed moment
-            if self.process_validation_logger:
-                self.process_validation_logger.log_event(
-                    "ReleaseValidation",
-                    f"[{self.env.now}] {self.name_process}: resource_trigger succeeded"
-                )
-                
             # Create new trigger immediately
             self.resource_trigger = self.env.event()
-            
-            # validation log: record reset moment
-            if self.process_validation_logger:
-                self.process_validation_logger.log_event(
-                    "ReleaseValidation",
-                    f"[{self.env.now}] {self.name_process}: resource_trigger reset"
-                )
-                
+
         if self.logger:
             self.logger.log_event(
                 "Resource", f"Released {processor_resource.name} in {self.name_process}")
@@ -347,19 +305,21 @@ class Process:
             'duration': None
         }
 
+    def create_waiting_step(self, job):
+        """Create waiting step for job history"""
+        return {
+            'process': self.name_process,
+            'start_time': job.time_waiting_start,
+            'end_time': None,
+            'duration': None
+        }
+    
     def send_job_to_next(self, job):
         """Send job to next process"""
         if self.next_process:
             if self.logger:
                 self.logger.log_event(
                     "Process Flow", f"Moving job {job.id_job} from {self.name_process} to {self.next_process.name_process}")
-            
-            # validation code
-            if self.process_validation_logger:
-                self.process_validation_logger.log_event(
-                    "DelayValidation", f"Process Flow: Moving job {job.id_job} from {self.name_process} to {self.next_process.name_process}"
-                )
-
             # Add job to next process queue
             self.next_process.add_to_queue(job)
             return True
@@ -368,11 +328,4 @@ class Process:
             if self.logger:
                 self.logger.log_event(
                     "Process Flow", f"Job {job.id_job} completed at {self.name_process} (final process)")
-
-            # validation code    
-            if self.process_validation_logger:
-                self.process_validation_logger.log_event(
-                    "DelayValidation", f"Process Flow: Job {job.id_job} completed at {self.name_process} (final process)"
-                )
-
             return False
