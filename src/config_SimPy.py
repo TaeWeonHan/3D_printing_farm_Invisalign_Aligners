@@ -28,12 +28,12 @@ PROC_TIME_DRY = 120  # Process time for dry (unit: minutes)
 PROC_TIME_INSPECT = 0  # Process time for inspect per item (unit: minutes)
 
 # Unit Processing time (in minutes)
-UNIT_PROC_TIME = 10
+UNIT_PROC_TIME = 3
 
 # Machines and workers processing time correlation
-BUILD_CORRELATION = 1
-WASH_CORRELATION = 1
-DRY_CORRELATION = 1
+BUILD_CORRELATION = 0
+WASH_CORRELATION = 0
+DRY_CORRELATION = 0
 INSPECT_CORRELATION = 1
 
 # Machine settings
@@ -45,20 +45,20 @@ CAPACITY_MACHINE_WASH = 2  # Job capacity for wash machines
 CAPACITY_MACHINE_DRY = 2  # Job capacity for dry machines
 
 # Process settings
-DEFECT_RATE_PROC_BUILD = 0  # 5% defect rate in build process
+DEFECT_RATE_PROC_BUILD = 0.2  # 5% defect rate in build process
 NUM_WORKERS_IN_INSPECT = 5  # Number of workers in inspection process
-
 
 """ Policy settings """
 # Number of defective items to collect for rework
-POLICY_NUM_DEFECT_PER_JOB = 10
+POLICY_NUM_DEFECT_PER_JOB = 5
 # Policy for placing rework jobs in queue
 POLICY_REPROC_SEQ_IN_QUEUE = "QUEUE_LAST"
 # Policy for extracting jobs from queue
 POLICY_DISPATCH_FROM_QUEUE = "FIFO"
 # Policy for dividing orders into jobs: "EQUAL_SPLIT" or "MAX_PER_JOB"
-POLICY_ORDER_TO_JOB = "MAX_PER_JOB"
-
+POLICY_ORDER_TO_JOB = "EQUAL_SPLIT"
+# Job priority settings ("FRONT", "MIDDLE", "BACK")
+POLICY_REPROC_INSERT_POSITION = "FRONT"
 
 """ Customer settings """
 
@@ -66,13 +66,13 @@ POLICY_ORDER_TO_JOB = "MAX_PER_JOB"
 
 
 def NUM_PATIENTS_PER_ORDER(): return random.randint(
-    5, 5)
+    7, 7)
 
 # Number of items per patient
 
 
 def NUM_ITEMS_PER_PATIENT(): return random.randint(
-    3, 3)
+    70, 70)
 
 
 # Customer settings

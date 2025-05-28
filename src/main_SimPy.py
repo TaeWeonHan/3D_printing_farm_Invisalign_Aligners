@@ -31,7 +31,7 @@ def run_simulation(sim_duration=SIM_TIME):
     # Run simulation
     env.run(until=sim_duration)
 
-    # ─── 디버깅용: waiting_history 출력 ───
+    """# ─── 디버깅용: waiting_history 출력 ───
     print("\n=== Debug: Waiting History per Job ===")
     # 1) 모든 프로세스 가져오기
     processes = manager.get_processes()                            # :contentReference[oaicite:0]{index=0}
@@ -50,9 +50,12 @@ def run_simulation(sim_duration=SIM_TIME):
             start = step.get('start_time')
             end   = step.get('end_time')
             dur   = step.get('duration')
+            if start is None or end is None or dur is None:
+                continue
+            
             print(f"  - {proc}: start={start:.1f}, end={end:.1f}, dur={dur:.1f}")
-    print("=== End Debug ===\n")
-    print("\n=== Debug: Processing History per Job ===")
+    print("=== End Debug ===\n")"""
+    """print("\n=== Debug: Processing History per Job ===")
     # 1) 모든 프로세스 가져오기
     processes = manager.get_processes()                            # :contentReference[oaicite:0]{index=0}
     # 2) completed_jobs 집계 (중복 제거)
@@ -70,8 +73,11 @@ def run_simulation(sim_duration=SIM_TIME):
             start = step.get('start_time')
             end   = step.get('end_time')
             dur   = step.get('duration')
+            if start is None or end is None or dur is None:
+                continue
+
             print(f"  - {proc}: start={start:.1f}, end={end:.1f}, dur={dur:.1f}")
-    print("=== End Debug ===\n")
+    print("=== End Debug ===\n")"""
     
     # Collect and display results
     print("\n================ Simulation Results ================")

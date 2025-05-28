@@ -107,3 +107,12 @@ class Proc_Inspect(Process):
 
         # Return True to indicate processing was done
         return True
+
+    def calculate_processing_time(self, base_time, jobs):
+        """
+        A dynamic processing time calculation method dedicated to the Inspect step
+        """
+        for job in jobs:
+            job.num_items
+            job.processing_time = base_time + job.num_items * UNIT_PROC_TIME * INSPECT_CORRELATION
+        return True

@@ -2,6 +2,7 @@ from base_Job import Job
 from config_SimPy import *
 from specialized_Process import Proc_Build, Proc_Wash, Proc_Dry, Proc_Inspect
 from base_Customer import OrderReceiver
+import math
 
 
 class Manager(OrderReceiver):
@@ -108,6 +109,23 @@ class Manager(OrderReceiver):
                         self.proc_build.add_to_queue(job)
 
                 # Additional policies can be implemented here if needed
+                elif POLICY_ORDER_TO_JOB == "EQUAL_SPLIT":
+                # Split items into num_jobs jobs with as-even-as-possible sizes
+                    N = len(patient_items)
+                    num_jobs = math.ceil(N / PALLET_SIZE_LIMIT)
+                    base = N // num_jobs
+                    rem = N % num_jobs
+                    start = 0
+                    for j in range(num_jobs):
+                        size = base + (1 if j < rem else 0)
+                        job_items = patient_items[start:start+size]
+                        start += size
+                        job = Job(self.next_job_id, job_items)
+                        self.next_job_id += 1
+                        if self.logger:
+                            self.logger.log_event(
+                                "Manager", f"Created job {job.id_job} for patient {patient.id_patient} with {len(job_items)} items (equal split job)")
+                        self.proc_build.add_to_queue(job)
 
     def create_job_for_defects(self):
         """Create jobs for defective items that need rework"""
@@ -138,12 +156,13 @@ class Manager(OrderReceiver):
             # Add the job to the Build process queue according to policy
             if POLICY_REPROC_SEQ_IN_QUEUE == "QUEUE_LAST":
                 # Add job to the end of the queue
-                self.proc_build.add_to_queue(job)
                 if self.logger:
                     self.logger.log_event(
                         "Manager", f"Created rework job {job.id_job} with {len(items_for_job)} defective items (added to end of queue)")
                     self.logger.log_event(
                         "Manager", f"Remaining defective items: {len(self.proc_inspect.defective_items)}")
+                
+                self.proc_build.defect_add_to_queue(job)
                     
     def check_orders_completed(self, item):
         """Check if an order has been fully completed based on the given item."""
@@ -181,6 +200,9 @@ class Manager(OrderReceiver):
             # Record completion time and compute makespan
             order.time_end = self.env.now
             order.makespan = order.time_end - order.time_start
+
+            # Debug
+            print(f"[Debug] Order {order.id_order} (Customer {order.id_customer}) completed at {order.time_end:.0f}, makespan: {order.makespan:.0f} min")
 
             # Add the order to the list of completed orders
             self.completed_orders.append(order)

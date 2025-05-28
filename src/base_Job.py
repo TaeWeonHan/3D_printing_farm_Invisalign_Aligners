@@ -1,5 +1,5 @@
 import simpy
-
+from config_SimPy import *
 
 class Job:
     """
@@ -55,6 +55,51 @@ class JobStore(simpy.Store):
         self.queue_length_history.append((self._env.now, len(self.items)))
         return result
 
+    def rework_put(self, job):
+        """
+        Add a reprocessed job to the store according to the FRONT/MIDDLE/BACK policy:
+        * FRONT: place after all existing reprocessed jobs (idx = number of existing reprocess jobs)
+        * MIDDLE: insert at floor(len/2) plus offset for same-timestamp reprocess jobs with lower IDs
+        * BACK: append to the end of the queue
+        """
+        # 1) Perform the standard put to append the job and get the event result
+        result = super().put(job)
+
+        # 2) Remove the newly appended job from the end of the internal list
+        items = self.items  # internal Python list of stored jobs
+        new_job = items.pop(-1)
+
+        # 3) Determine insertion index based on the configured policy
+        pos = POLICY_REPROC_INSERT_POSITION.upper()
+        if pos == "FRONT":
+            # Count existing reprocessed jobs for front insertion
+            idx = sum(1 for j in items if getattr(j, "is_reprocess", False))
+
+        elif pos == "MIDDLE":
+            # Base index at the middle of the current queue
+            base_index = len(items) // 2
+            # Offset by the number of same-timestamp reprocessed jobs with lower IDs
+            offset = sum(
+                1
+                for j in items
+                if getattr(j, "is_reprocess", False)
+                and getattr(j, "time_waiting_start", None) == self._env.now
+                and j.id_job < new_job.id_job
+            )
+            idx = base_index + offset
+
+        else:  # BACK
+            # Simply append to the end
+            idx = len(items)
+
+        # 4) Insert the job at the calculated index
+        items.insert(idx, new_job)
+
+        # 5) Record the new queue length
+        self.queue_length_history.append((self._env.now, len(items)))
+
+        return result
+    
     def get(self):
         """Get Job from queue (override)"""
         result = super().get()

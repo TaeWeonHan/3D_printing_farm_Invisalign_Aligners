@@ -1,6 +1,5 @@
 from base_Job import JobStore
 from base_Processor import ProcessorResource
-from cal_ProcessingTime import calculate_processing_time
 
 class Process:
     """
@@ -76,7 +75,31 @@ class Process:
         # if self.logger:
         #     self.logger.log_event(
         #         "Resource", f"Registered {processor.type_processor} {processor_name} to process {self.name_process}")
+    def defect_add_to_queue(self, job):
+        """Add reprocessed job to queue"""
+        job.time_waiting_start = self.env.now
+        if not hasattr(job, 'process_sequence'):
+            job.process_sequence = []
+        job.process_sequence.append(self.name_process)
 
+        # Record job waiting history
+        process_step = self.create_waiting_step(job)
+        if not hasattr(job, 'waiting_history'):
+            job.waiting_history = []
+        job.waiting_history.append(process_step)
+
+        # Add job to JobStore
+        self.job_store.rework_put(job)
+
+        # Trigger job added event
+        self.job_added_trigger.succeed()
+        # Create new trigger immediately
+        self.job_added_trigger = self.env.event()
+
+        if self.logger:
+            self.logger.log_event(
+                "Queue", f"Added reprocessed job {job.id_job} to {self.name_process} queue. Queue length: {self.job_store.size}")
+            
     def add_to_queue(self, job):
         """Add job to queue"""
         job.time_waiting_start = self.env.now
@@ -221,26 +244,18 @@ class Process:
         # Request processor resource
         request = processor_resource.request()
         yield request
-
+        
         # Calculate and wait for dynamic processing time
-        dynamic_times = []
-        for job in jobs:
-            # Calculate beyond default processing time and process name
-            t = calculate_processing_time(
-                    job,
-                    self.name_process,
-                    processor_resource.processing_time
-                )
-            job.job_processing_time = t
-            dynamic_times.append(t)
-
-        if processor_resource.allows_job_addition_during_processing == False:
-            process_time = sum(dynamic_times)
-            yield self.env.timeout(process_time)
-
+        if hasattr(self, 'calculate_processing_time'):
+            self.calculate_processing_time(processor_resource.processing_time, jobs)
+            for job in jobs:
+                processing_time = job.processing_time
+                yield self.env.timeout(processing_time)
+        
         else:
-            for process_time in dynamic_times:
-                yield self.env.timeout(process_time)
+            processing_time = processor_resource.processing_time
+                
+            yield self.env.timeout(processing_time)
 
         # Special processing (if needed)
         if hasattr(self, 'apply_special_processing'):
