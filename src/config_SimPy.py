@@ -56,7 +56,7 @@ POLICY_REPROC_SEQ_IN_QUEUE = "QUEUE_LAST"
 # Policy for extracting jobs from queue
 POLICY_DISPATCH_FROM_QUEUE = "FIFO"
 # Policy for dividing orders into jobs: "EQUAL_SPLIT" or "MAX_PER_JOB"
-POLICY_ORDER_TO_JOB = "EQUAL_SPLIT"
+POLICY_ORDER_TO_JOB = "MAX_PER_JOB"
 # Job priority settings ("FRONT", "MIDDLE", "BACK")
 POLICY_REPROC_INSERT_POSITION = "FRONT"
 
